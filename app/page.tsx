@@ -452,7 +452,7 @@ export default function VectorPlatform() {
             <div style={{height:'100%',overflowY:'auto'}}>
               <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:1,background:'#222'}}>
                 {[
-                  {label:'Active Setups',value:setups.length.toString(),sub:`ES(${setups.filter(s=>s.symbol==='ES').length}) · NQ(${setups.filter(s=>s.symbol==='NQ').length}) · ${[...new Set(setups.map(s=>s.timeframe))].length} TFs`,color:'#F59E0B'},
+                  {label:'Active Setups',value:setups.length.toString(),sub:`ES(${setups.filter(s=>s.symbol==='ES').length}) · NQ(${setups.filter(s=>s.symbol==='NQ').length}) · ${Array.from(new Set(setups.map(s=>s.timeframe))).length} TFs`,color:'#F59E0B'},
                   {label:'Best Confluence',value:`${bestScore}/100`,sub:`${topSetup?.symbol??'—'} ${topSetup?.timeframe??''} · ${topSetup?.setup_type??'Loading...'}`,color:'#00FF41'},
                   {label:'HTF Bias',value:'BULLISH',sub:'Daily · 4H · 1H aligned',color:'#00FF41'},
                 ].map((k,i)=>(
