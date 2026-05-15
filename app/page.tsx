@@ -82,7 +82,7 @@ export default function VectorPlatform() {
   const [clock, setClock] = useState('');
   const [selectedSetup, setSelectedSetup] = useState<Setup | null>(null);
   const [searchKB, setSearchKB] = useState('');
-  const [chartSymbol, setChartSymbol] = useState('NASDAQ:QQQ');
+  const [chartSymbol, setChartSymbol] = useState('NASDAQ:NDX');
   const priceRef = useRef<NodeJS.Timeout | null>(null);
 
   // Live NY clock
@@ -173,10 +173,12 @@ export default function VectorPlatform() {
   );
 
   const chartSymbols = [
-    { label: 'NQ (NDX)', value: 'TVC:NDX' },
-    { label: 'ES (SPX)', value: 'TVC:SPX' },
-    { label: 'Gold', value: 'TVC:GOLD' },
+    { label: 'NQ / NDX', value: 'NASDAQ:NDX' },
+    { label: 'ES / SPX', value: 'SP:SPX' },
+    { label: 'Gold', value: 'OANDA:XAUUSD' },
     { label: 'DXY', value: 'TVC:DXY' },
+    { label: 'QQQ', value: 'NASDAQ:QQQ' },
+    { label: 'SPY', value: 'AMEX:SPY' },
   ];
 
   return (
@@ -234,9 +236,9 @@ export default function VectorPlatform() {
             {/* Stat cards */}
             <div className="col-span-12 grid grid-cols-4 gap-3">
               {[
-                { label: 'Win Rate', value: `${winRate}%`, color: 'text-green-400' },
-                { label: 'Total P&L', value: `$${Math.round(totalPnl).toLocaleString()}`, color: totalPnl >= 0 ? 'text-green-400' : 'text-red-400' },
-                { label: 'Avg R:R', value: `${avgRR}R`, color: 'text-blue-400' },
+                { label: `Win Rate (${trades.length} trades)`, value: trades.length ? `${winRate}%` : '—', color: 'text-green-400' },
+                { label: 'Backtest P&L', value: trades.length ? `$${Math.round(totalPnl).toLocaleString()}` : '—', color: totalPnl >= 0 ? 'text-green-400' : 'text-red-400' },
+                { label: 'Avg R:R', value: trades.length ? `${avgRR}R` : '—', color: 'text-blue-400' },
                 { label: 'Active Setups', value: activeSetups.toString(), color: 'text-yellow-400' },
               ].map(s => (
                 <div key={s.label} className="bg-gray-900 border border-gray-800 rounded p-3">
@@ -269,7 +271,7 @@ export default function VectorPlatform() {
                   {setups.map(s => (
                     <tr
                       key={s.id}
-                      onClick={() => setSelectedSetup(s)}
+                      onClick={() => { setSelectedSetup(s); setAiResponse(''); }}
                       className={`border-b border-gray-800 cursor-pointer hover:bg-gray-800 transition-colors ${selectedSetup?.id === s.id ? 'bg-gray-800' : ''}`}
                     >
                       <td className="py-1 text-white font-bold">{s.symbol}</td>
@@ -347,13 +349,19 @@ export default function VectorPlatform() {
                   {aiLoading ? 'Analyzing...' : 'Run AI Analysis'}
                 </button>
                 {aiResponse && (
-                  <div className="text-gray-300 text-xs leading-relaxed max-h-48 overflow-y-auto whitespace-pre-wrap">
+                  <div className="text-gray-300 text-xs leading-relaxed max-h-64 overflow-y-auto whitespace-pre-wrap border-t border-gray-700 pt-2">
                     {aiResponse}
                   </div>
                 )}
-                {!aiResponse && !aiLoading && (
+                {!aiResponse && selectedSetup?.ai_analysis && !aiLoading && (
+                  <div className="text-gray-400 text-xs leading-relaxed max-h-64 overflow-y-auto whitespace-pre-wrap border-t border-gray-700 pt-2">
+                    <div className="text-gray-600 text-xs mb-1">Previous analysis:</div>
+                    {selectedSetup.ai_analysis}
+                  </div>
+                )}
+                {!aiResponse && !selectedSetup?.ai_analysis && !aiLoading && (
                   <div className="text-gray-700 text-xs">
-                    Select a setup above then click Run AI Analysis to get ICT/SMC reasoning.
+                    Select a setup then click Run AI Analysis for ICT/SMC reasoning.
                   </div>
                 )}
               </div>
@@ -409,7 +417,7 @@ export default function VectorPlatform() {
         {/* ── CHART ── */}
         {activeTab === 'Chart' && (
           <div className="flex flex-col gap-2">
-            <div className="flex gap-2 items-center">
+            <div className="flex gap-2 items-center flex-wrap">
               <span className="text-gray-500 text-xs">Symbol:</span>
               {chartSymbols.map(s => (
                 <button
@@ -424,14 +432,11 @@ export default function VectorPlatform() {
                   {s.label}
                 </button>
               ))}
-              <span className="text-gray-600 text-xs ml-2">
-                (CME futures require TradingView Premium — using index equivalents)
-              </span>
             </div>
             <div className="h-[78vh] bg-gray-900 border border-gray-800 rounded overflow-hidden">
               <iframe
                 key={chartSymbol}
-                src={`https://s.tradingview.com/widgetembed/?frameElementId=tv_chart&symbol=${encodeURIComponent(chartSymbol)}&interval=15&theme=dark&style=1&timezone=America%2FNew_York&withdateranges=1&hide_side_toolbar=0&allow_symbol_change=1&save_image=0&details=1`}
+                src={`https://s.tradingview.com/widgetembed/?frameElementId=tv_chart&symbol=${encodeURIComponent(chartSymbol)}&interval=15&theme=dark&style=1&timezone=America%2FNew_York&withdateranges=1&hide_side_toolbar=0&allow_symbol_change=1&save_image=0&studies=MAExp%4040`}
                 className="w-full h-full border-0"
                 title="TradingView Chart"
               />
@@ -497,18 +502,19 @@ export default function VectorPlatform() {
 
         {/* ── KNOWLEDGE BASE ── */}
         {activeTab === 'Knowledge' && (
-          <div className="space-y-3">
+          <div className="flex flex-col gap-3 h-[calc(100vh-130px)]">
             <input
               type="text"
               placeholder="Search knowledge base..."
               value={searchKB}
               onChange={e => setSearchKB(e.target.value)}
-              className="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-sm text-gray-300 placeholder-gray-600 focus:outline-none focus:border-blue-500"
+              className="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-sm text-gray-300 placeholder-gray-600 focus:outline-none focus:border-blue-500 shrink-0"
             />
-            <div className="text-gray-600 text-xs">
+            <div className="text-gray-600 text-xs shrink-0">
               {filteredArticles.length} of {articles.length} articles
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="overflow-y-auto flex-1 pr-1">
+              <div className="grid grid-cols-2 gap-3 pb-4">
               {filteredArticles.map(a => (
                 <div key={a.id} className="bg-gray-900 border border-gray-800 rounded p-3">
                   <div className="flex justify-between items-start mb-1">
@@ -532,6 +538,7 @@ export default function VectorPlatform() {
               {articles.length === 0 && (
                 <div className="col-span-2 text-center text-gray-600 py-8">Loading knowledge base...</div>
               )}
+              </div>
             </div>
           </div>
         )}
