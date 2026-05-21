@@ -529,7 +529,7 @@ function MarketSyncModal({ prices, kz, onClose, onSaved }: {
         body: JSON.stringify({ symbols, timeframes, currentPrices: prices }),
       });
       const data = await res.json();
-      if (data.error) { setError(data.error); } else { setResult(data); }
+      if (data.error) { setError(typeof data.error === 'string' ? data.error : JSON.stringify(data.error)); } else { setResult(data); }
     } catch (e) { setError(String(e)); }
     setLoading(false);
   };
@@ -796,31 +796,30 @@ export default function App() {
     return () => { clearInterval(pi); clearInterval(ki); clearInterval(ni); };
   }, [loadPrices, loadKz, loadNews]);
 
-  // Live monitoring — check SL breaches and entry zone hits
+  // Deduplicated live monitoring — only active/watching, fires once per setup
+  const firedAlerts = useRef<Set<string>>(new Set());
   useEffect(() => {
     if (!prices.NQ && !prices.ES) return;
     setups.forEach(s => {
-      if (s.status === 'expired' || s.status === 'closed') return;
+      if (!['active', 'watching'].includes(s.status)) return;
+      if (s.expires_at && new Date(s.expires_at) < new Date()) return;
       const price = prices[s.symbol as keyof Prices];
       if (!price) return;
       const isBull = s.direction === 'bull' || s.direction === 'long';
-      // SL breach
-      if (isBull && price < s.stop_loss) {
-        addAlert(`🔴 SL BREACHED — ${s.symbol} ${s.setup_type} SL at ${fmt(s.stop_loss)} | Current: ${price.toFixed(1)}`, 'red');
+      const slKey = `sl-${s.id}`;
+      if (!firedAlerts.current.has(slKey) && ((isBull && price < s.stop_loss) || (!isBull && price > s.stop_loss))) {
+        firedAlerts.current.add(slKey);
+        addAlert(`🔴 SL BREACHED — ${s.symbol} ${s.setup_type} SL ${fmt(s.stop_loss)} | Now: ${price.toFixed(1)}`, 'red');
       }
-      if (!isBull && price > s.stop_loss) {
-        addAlert(`🔴 SL BREACHED — ${s.symbol} ${s.setup_type} SL at ${fmt(s.stop_loss)} | Current: ${price.toFixed(1)}`, 'red');
+      const entryKey = `entry-${s.id}`;
+      if (!firedAlerts.current.has(entryKey) && price >= s.entry_low && price <= s.entry_high) {
+        firedAlerts.current.add(entryKey);
+        addAlert(`🟢 IN ENTRY ZONE — ${s.symbol} ${s.setup_type} ${fmt(s.entry_low)}–${fmt(s.entry_high)}`, 'green');
       }
-      // Entry zone hit
-      if (price >= s.entry_low && price <= s.entry_high && s.status === 'watching') {
-        addAlert(`🟢 ENTRY ZONE — ${s.symbol} ${s.setup_type} price in ${fmt(s.entry_low)}–${fmt(s.entry_high)}`, 'green');
-      }
-      // Target hit
-      if (isBull && price >= s.target) {
-        addAlert(`🎯 TARGET HIT — ${s.symbol} ${s.setup_type} TP ${fmt(s.target)} reached!`, 'blue');
-      }
-      if (!isBull && price <= s.target) {
-        addAlert(`🎯 TARGET HIT — ${s.symbol} ${s.setup_type} TP ${fmt(s.target)} reached!`, 'blue');
+      const tpKey = `tp-${s.id}`;
+      if (!firedAlerts.current.has(tpKey) && ((isBull && price >= s.target) || (!isBull && price <= s.target))) {
+        firedAlerts.current.add(tpKey);
+        addAlert(`🎯 TARGET HIT — ${s.symbol} ${s.setup_type} TP ${fmt(s.target)}!`, 'blue');
       }
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
