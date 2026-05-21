@@ -19,12 +19,10 @@ async function fetchPrice(symbol: string): Promise<number | null> {
       next: { revalidate: 0 },
     });
     if (!res.ok) return null;
-    const json = await res.json();
-    const price = json?.chart?.result?.[0]?.meta?.regularMarketPrice;
-    return price ?? null;
-  } catch {
-    return null;
-  }
+    const data = await res.json();
+    const meta = data?.chart?.result?.[0]?.meta;
+    return meta?.regularMarketPrice ?? meta?.previousClose ?? null;
+  } catch { return null; }
 }
 
 export async function GET() {
@@ -36,8 +34,9 @@ export async function GET() {
     fetchPrice(SYMBOLS.VIX),
   ]);
 
+  const prices = { NQ, ES, GC, DXY, VIX };
   return NextResponse.json(
-    { NQ, ES, GC, DXY, VIX, timestamp: Date.now() },
+    { prices, timestamp: Date.now() },
     { headers: { 'Cache-Control': 'no-store' } }
   );
 }

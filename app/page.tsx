@@ -506,146 +506,132 @@ function NewSetupModal({ onClose, onSaved }: { onClose: () => void; onSaved: () 
   );
 }
 
-// ── MARKET SYNC MODAL ─────────────────────────────────────────────────
+// ── AUTO SCAN MODAL ────────────────────────────────────────────────────
 function MarketSyncModal({ prices, kz, onClose, onSaved }: {
   prices: Prices; kz: KillzoneData | null;
   onClose: () => void; onSaved: () => void;
 }) {
-  const [symbol, setSymbol] = useState<'NQ'|'ES'>('NQ');
-  const [tf, setTf] = useState('15m');
+  const [symbols, setSymbols] = useState<string[]>(['NQ', 'ES']);
+  const [timeframes, setTimeframes] = useState<string[]>(['15m', '1h']);
   const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<string | null>(null);
-  const [generated, setGenerated] = useState<Partial<Setup> | null>(null);
-  const [saving, setSaving] = useState(false);
+  const [result, setResult] = useState<{ message: string; count: number; setups: Partial<Setup>[] } | null>(null);
+  const [error, setError] = useState('');
 
-  const sync = async () => {
-    setLoading(true); setResult(null); setGenerated(null);
+  const toggleSym = (s: string) => setSymbols(p => p.includes(s) ? p.filter(x => x !== s) : [...p, s]);
+  const toggleTf  = (t: string) => setTimeframes(p => p.includes(t) ? p.filter(x => x !== t) : [...p, t]);
+
+  const scan = async () => {
+    if (!symbols.length || !timeframes.length) { setError('Select at least one symbol and timeframe.'); return; }
+    setLoading(true); setResult(null); setError('');
     try {
-      // fetch candles + analyze for patterns
-      const cRes = await fetch(`/api/candles?symbol=${symbol}&tf=${tf}`);
-      const cData = await cRes.json();
-      const candles: Candle[] = cData.candles ?? [];
-      if (candles.length < 20) { setResult('Not enough candle data to analyze.'); setLoading(false); return; }
-
-      // Simple pattern detection: find OB (last bearish candle before bullish move)
-      const last = candles[candles.length - 1];
-      const prev5 = candles.slice(-6, -1);
-      const bullish = last.c > last.o;
-      // Find swing high/low in last 20 candles
-      const recent = candles.slice(-20);
-      const highs = recent.map(c => c.h);
-      const lows = recent.map(c => c.l);
-      const swingH = Math.max(...highs);
-      const swingL = Math.min(...lows);
-      const range = swingH - swingL;
-      const premium = swingH - range * 0.382;
-      const discount = swingL + range * 0.382;
-      const currentPrice = prices[symbol] ?? last.c;
-
-      // Determine direction based on price location
-      const isDiscount = currentPrice < (swingH + swingL) / 2;
-      const direction = isDiscount ? 'bull' : 'bear';
-
-      // Find last OB (last opposing candle before the dominant move)
-      let ob: Candle | null = null;
-      for (let i = candles.length - 2; i >= candles.length - 10; i--) {
-        if (direction === 'bull' && candles[i].c < candles[i].o) { ob = candles[i]; break; }
-        if (direction === 'bear' && candles[i].c > candles[i].o) { ob = candles[i]; break; }
-      }
-
-      const entryLow = ob ? Math.min(ob.o, ob.c) : (direction === 'bull' ? discount : premium - range * 0.1);
-      const entryHigh = ob ? Math.max(ob.o, ob.c) : (direction === 'bull' ? discount + range * 0.05 : premium);
-      const sl = direction === 'bull' ? entryLow - range * 0.03 : entryHigh + range * 0.03;
-      const tp = direction === 'bull' ? swingH + range * 0.05 : swingL - range * 0.05;
-      const rr = Math.abs(tp - (entryLow + entryHigh) / 2) / Math.abs((entryLow + entryHigh) / 2 - sl);
-
-      const setup: Partial<Setup> = {
-        symbol, timeframe: tf, direction,
-        setup_type: ob ? (direction === 'bull' ? 'OB Retest (Auto)' : 'OB Rejection (Auto)') : 'Discount/Premium (Auto)',
-        entry_low: parseFloat(entryLow.toFixed(2)),
-        entry_high: parseFloat(entryHigh.toFixed(2)),
-        stop_loss: parseFloat(sl.toFixed(2)),
-        target: parseFloat(tp.toFixed(2)),
-        rr_ratio: parseFloat(rr.toFixed(2)),
-        dol_target: direction === 'bull' ? `BSL at ${swingH.toFixed(0)} — swing high` : `SSL at ${swingL.toFixed(0)} — swing low`,
-        htf_bias: direction === 'bull' ? 'bullish' : 'bearish',
-        cisd_confirmed: false,
-        volume_context: 'medium',
-        killzone_valid: 'NY,SB',
-        status: 'watching',
-        confluence_score: Math.min(75, Math.round(50 + rr * 5 + (ob ? 10 : 0))),
-        correlated_align: true,
-      };
-
-      setGenerated(setup);
-      setResult(`${direction.toUpperCase()} setup detected on ${symbol} ${tf}. ${ob ? `OB found at ${entryLow.toFixed(0)}–${entryHigh.toFixed(0)}.` : `Price in ${isDiscount ? 'discount' : 'premium'} zone.`} R:R = ${rr.toFixed(1)}`);
-    } catch (e) { setResult('Analysis failed: ' + String(e)); }
-    setLoading(false);
-  };
-
-  const saveGenerated = async () => {
-    if (!generated) return;
-    setSaving(true);
-    const expiresAt = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString();
-    try {
-      await fetch('/api/setups', {
+      const res = await fetch('/api/autoscan', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...generated, ai_analysis: '', invalidated_reason: '', expires_at: expiresAt }),
+        body: JSON.stringify({ symbols, timeframes, currentPrices: prices }),
       });
-      onSaved(); onClose();
-    } catch (e) { setResult(String(e)); }
-    setSaving(false);
+      const data = await res.json();
+      if (data.error) { setError(data.error); } else { setResult(data); }
+    } catch (e) { setError(String(e)); }
+    setLoading(false);
   };
 
   return (
     <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50" onClick={onClose}>
-      <div className="bg-gray-900 border border-gray-700 rounded-lg p-4 w-96" onClick={e => e.stopPropagation()}>
+      <div className="bg-gray-900 border border-gray-700 rounded-lg p-4 w-[420px] max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
         <div className="flex justify-between items-center mb-3">
-          <span className="text-white font-bold text-sm">🔄 Market Sync — Auto-Generate Setup</span>
+          <span className="text-white font-bold text-sm">⚡ Auto-Scan — Find New Setups from Live Market</span>
           <button onClick={onClose} className="text-gray-500 hover:text-red-400">✕</button>
         </div>
-        <div className="bg-gray-800 rounded p-2 text-xs text-gray-400 mb-3">
-          <div>NQ: <span className="text-white">{prices.NQ?.toFixed(2) ?? '—'}</span></div>
-          <div>ES: <span className="text-white">{prices.ES?.toFixed(2) ?? '—'}</span></div>
-          {kz?.active && <div>Killzone: <span style={{ color: kz.active.color }}>{kz.active.name} — {kz.probability}</span></div>}
+
+        {/* Live prices snapshot */}
+        <div className="grid grid-cols-2 gap-2 bg-gray-800 rounded p-2 text-xs mb-3">
+          {(['NQ','ES','GC','DXY'] as const).map(s => (
+            <div key={s} className="flex justify-between">
+              <span className="text-gray-500">{s}</span>
+              <span className="text-white font-bold">{prices[s]?.toFixed(s === 'DXY' ? 3 : 1) ?? '—'}</span>
+            </div>
+          ))}
+          {kz?.active && (
+            <div className="col-span-2 text-center" style={{ color: kz.active.color }}>
+              {kz.active.name} ACTIVE — {kz.probability}
+            </div>
+          )}
+          {!kz?.active && kz?.upcoming[0] && (
+            <div className="col-span-2 text-center text-gray-600">
+              Next: {kz.upcoming[0].name} in {kz.upcoming[0].minsAway}m
+            </div>
+          )}
         </div>
-        <div className="flex gap-2 mb-3">
-          <div className="flex gap-1">
-            {(['NQ','ES'] as const).map(s => (
-              <button key={s} onClick={() => setSymbol(s)}
-                className={`text-xs px-3 py-1 rounded ${symbol===s ? 'bg-blue-600 text-white' : 'bg-gray-800 text-gray-400'}`}>{s}</button>
+
+        {/* Symbols */}
+        <div className="mb-2">
+          <div className="text-gray-500 text-xs mb-1">Scan Symbols:</div>
+          <div className="flex gap-2">
+            {['NQ','ES'].map(s => (
+              <button key={s} onClick={() => toggleSym(s)}
+                className={`text-xs px-4 py-1.5 rounded border transition-colors ${symbols.includes(s) ? 'bg-blue-600 border-blue-500 text-white' : 'bg-gray-800 border-gray-700 text-gray-400'}`}>
+                {s} {prices[s as keyof Prices] ? `${prices[s as keyof Prices]?.toFixed(0)}` : ''}
+              </button>
             ))}
           </div>
-          <div className="flex gap-1">
+        </div>
+
+        {/* Timeframes */}
+        <div className="mb-3">
+          <div className="text-gray-500 text-xs mb-1">Timeframes:</div>
+          <div className="flex gap-2">
             {['15m','1h','4h'].map(t => (
-              <button key={t} onClick={() => setTf(t)}
-                className={`text-xs px-3 py-1 rounded ${tf===t ? 'bg-purple-600 text-white' : 'bg-gray-800 text-gray-400'}`}>{t}</button>
+              <button key={t} onClick={() => toggleTf(t)}
+                className={`text-xs px-4 py-1.5 rounded border transition-colors ${timeframes.includes(t) ? 'bg-purple-600 border-purple-500 text-white' : 'bg-gray-800 border-gray-700 text-gray-400'}`}>
+                {t}
+              </button>
             ))}
           </div>
         </div>
-        <button onClick={sync} disabled={loading}
-          className="w-full bg-green-700 hover:bg-green-600 disabled:bg-gray-700 text-white text-xs py-2 rounded font-bold mb-3 transition-colors">
-          {loading ? 'Analyzing Market...' : '⚡ Analyze & Generate'}
+
+        <div className="text-gray-600 text-xs mb-3 bg-gray-800 rounded p-2">
+          Scans {symbols.length} symbol{symbols.length !== 1 ? 's' : ''} × {timeframes.length} timeframe{timeframes.length !== 1 ? 's' : ''} = {symbols.length * timeframes.length} chart{symbols.length * timeframes.length !== 1 ? 's' : ''}.
+          Detects: FVG retests · OB sweeps · CISD displacement candles · Premium/Discount zones.
+          R:R filter: min 2.0. Saves valid setups directly to DB.
+        </div>
+
+        <button onClick={scan} disabled={loading || !symbols.length || !timeframes.length}
+          className="w-full bg-green-700 hover:bg-green-600 disabled:bg-gray-700 text-white text-sm py-2.5 rounded font-bold mb-3 transition-colors">
+          {loading ? (
+            <span className="flex items-center justify-center gap-2">
+              <span className="animate-spin">⟳</span> Scanning {symbols.join('+')} {timeframes.join('/')}...
+            </span>
+          ) : `⚡ Scan Market Now`}
         </button>
+
+        {error && <div className="text-red-400 text-xs bg-red-900/20 rounded p-2 mb-2">{error}</div>}
+
         {result && (
-          <div className={`text-xs rounded p-2 mb-2 ${generated ? 'text-green-300 bg-green-900/20 border border-green-800' : 'text-red-400 bg-red-900/20'}`}>
-            {result}
+          <div className={`rounded p-2 mb-2 text-xs ${result.count > 0 ? 'bg-green-900/20 border border-green-800' : 'bg-yellow-900/20 border border-yellow-800'}`}>
+            <div className={`font-bold mb-2 ${result.count > 0 ? 'text-green-400' : 'text-yellow-400'}`}>
+              {result.count > 0 ? `✅ ${result.message}` : `⚠ ${result.message}`}
+            </div>
+            {result.setups?.map((s, i) => (
+              <div key={i} className="bg-gray-800 rounded p-2 mb-1">
+                <div className="flex justify-between items-center mb-0.5">
+                  <span className="text-white font-bold">{s.symbol} {s.timeframe}</span>
+                  <span className={`text-xs px-1 rounded ${s.direction === 'bull' ? 'text-green-400 bg-green-900/40' : 'text-red-400 bg-red-900/40'}`}>{s.direction?.toUpperCase()}</span>
+                </div>
+                <div className="text-blue-300">{s.setup_type}</div>
+                <div className="flex gap-3 text-xs mt-0.5">
+                  <span className="text-gray-400">E: {fmt(s.entry_low)}–{fmt(s.entry_high)}</span>
+                  <span className="text-red-400">SL: {fmt(s.stop_loss)}</span>
+                  <span className="text-green-400">TP: {fmt(s.target)}</span>
+                  <span className="text-blue-400">{fmt(s.rr_ratio, 1)}R · {s.confluence_score}</span>
+                </div>
+              </div>
+            ))}
+            {result.count > 0 && (
+              <button onClick={() => { onSaved(); onClose(); }}
+                className="w-full mt-1 bg-blue-600 hover:bg-blue-500 text-white text-xs py-1.5 rounded">
+                View in Dashboard →
+              </button>
+            )}
           </div>
-        )}
-        {generated && (
-          <div className="bg-gray-800 rounded p-2 text-xs space-y-1 mb-2">
-            <div className="flex justify-between"><span className="text-gray-500">Direction</span><span className={dirColor(generated.direction!)}>{generated.direction?.toUpperCase()}</span></div>
-            <div className="flex justify-between"><span className="text-gray-500">Type</span><span className="text-blue-300">{generated.setup_type}</span></div>
-            <div className="flex justify-between"><span className="text-gray-500">Entry</span><span className="text-gray-300">{fmt(generated.entry_low)}–{fmt(generated.entry_high)}</span></div>
-            <div className="flex justify-between"><span className="text-gray-500">SL / TP</span><span><span className="text-red-400">{fmt(generated.stop_loss)}</span> / <span className="text-green-400">{fmt(generated.target)}</span></span></div>
-            <div className="flex justify-between"><span className="text-gray-500">R:R / Score</span><span className="text-blue-400">{fmt(generated.rr_ratio, 1)}R · {generated.confluence_score}</span></div>
-          </div>
-        )}
-        {generated && (
-          <button onClick={saveGenerated} disabled={saving}
-            className="w-full bg-blue-600 hover:bg-blue-500 disabled:bg-gray-700 text-white text-xs py-1.5 rounded font-bold transition-colors">
-            {saving ? 'Saving...' : '+ Add to Setups'}
-          </button>
         )}
       </div>
     </div>
