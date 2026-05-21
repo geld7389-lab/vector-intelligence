@@ -10,7 +10,7 @@ export async function GET(req: NextRequest) {
   let query = supabase
     .from('setups')
     .select('*')
-    .not('status', 'in', '("invalidated","expired","lost","won")')
+    .in('status', ['active', 'watching', 'triggered'])
     .order('confluence_score', { ascending: false })
     .limit(50)
 
