@@ -174,7 +174,7 @@ export async function POST(req: NextRequest) {
     }
     const expires = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString();
     const toInsert = allDetected.map(s => ({ ...(s as object), ai_analysis: '', invalidated_reason: '', expires_at: expires }));
-    const { data, error } = await supabase.from('setups').insert(toInsert).select();
+    const { data, error } = await supabase.from('setups').insert(toInsert, { ignoreDuplicates: true }).select();
     if (error) {
       console.error('Supabase insert error:', error);
       return NextResponse.json({ error: error.message ?? JSON.stringify(error), setups: [] }, { status: 500 });

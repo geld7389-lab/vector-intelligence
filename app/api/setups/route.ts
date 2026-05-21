@@ -10,6 +10,7 @@ export async function GET(req: NextRequest) {
   let query = supabase
     .from('setups')
     .select('*')
+    .not('status', 'in', '("invalidated","expired","lost","won")')
     .order('confluence_score', { ascending: false })
     .limit(50)
 
