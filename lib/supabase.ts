@@ -21,7 +21,7 @@ export type Database = {
           stop_loss: number
           target: number
           rr_ratio: number
-          status: 'active' | 'watching' | 'triggered' | 'invalidated' | 'won' | 'lost'
+          status: 'active' | 'watching' | 'triggered' | 'invalidated' | 'won' | 'lost' | 'expired'
           dol_target: string
           ai_analysis: string | null
           created_at: string
