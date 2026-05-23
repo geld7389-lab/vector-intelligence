@@ -207,7 +207,7 @@ function NewSetupModal({onClose,onSaved}:{onClose:()=>void;onSaved:()=>void}){
 }
 
 function ScanModal({prices,kz,onClose,onSaved}:{prices:Prices;kz:KZ|null;onClose:()=>void;onSaved:()=>void}){
-  const [syms,setSyms]=useState<string[]>(['NQ','ES']),tfs=useState<string[]>(['15m','1h'])[0];
+  const [syms,setSyms]=useState<string[]>(['NQ','ES']);
   const [tfsS,setTfsS]=useState<string[]>(['15m','1h']);
   const [loading,setLoading]=useState(false),[result,setResult]=useState<{message:string;count:number;setups:{symbol:string;timeframe:string;direction:string;setup_type:string;entry_low:number;entry_high:number;stop_loss:number;target:number;rr_ratio:number;confluence_score:number}[]}>|null>(null),[err,setErr]=useState('');
   const togS=(s:string)=>setSyms(p=>p.includes(s)?p.filter(x=>x!==s):[...p,s]);
