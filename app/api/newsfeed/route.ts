@@ -43,7 +43,7 @@ export async function GET(req: NextRequest) {
       release_time: n.releaseTime ?? new Date().toISOString(),
       metadata: n.metadata ?? null,
     }));
-    await sb.from('news_cache').upsert(toCache, { onConflict: 'headline' }).catch(() => {});
+    try { await sb.from('news_cache').upsert(toCache, { onConflict: 'headline' }); } catch {}
   }
 
   const news = fresh.length > 0 ? fresh : (cached ?? []);
