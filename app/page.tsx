@@ -20,7 +20,7 @@ type MarketTab = typeof MARKET_TABS[number];
 type PlatformTab = typeof PLATFORM_TABS[number];
 
 const f = (n:number|string|null|undefined, d=2) => { const x=Number(n); return isNaN(x)||x===null?'—':x.toFixed(d); };
-const fc = (n:number|null|undefined) => n===null||n===undefined?'text-white/30':n>0?'text-green-400/80':'text-red-400/70';
+const fc = (n:number|null|undefined) => n===null||n===undefined?'text-white/40':n>0?'text-green-400/80':'text-red-400/70';
 const dc = (d:string) => d==='bull'||d==='long'?'#22c55e':d==='bear'||d==='short'?'#ef4444':'#f59e0b';
 
 // ── MINI SPARKLINE ───────────────────────────────────────────────────
@@ -140,14 +140,14 @@ function CryptoTab({ setups, prices: futPrices, onSetupSelect, onShowChart }: { 
   return (
     <div className="flex flex-col gap-3 h-full overflow-y-auto pb-4">
       {/* Live Prices Grid */}
-      <div className="bg-[#0a0c10] border border-white/5 rounded-xl p-4">
-        <div className="text-white/30 text-xs uppercase tracking-wider mb-3">Live Crypto Prices · CoinDesk Index</div>
+      <div className="bg-[#161b22] border border-white/10 rounded-xl p-4">
+        <div className="text-white/40 text-xs uppercase tracking-wider mb-3">Live Crypto Prices · CoinDesk Index</div>
         <div className="grid grid-cols-5 gap-2">
-          {prices.length === 0 && <div className="col-span-5 text-white/15 text-xs">Loading...</div>}
+          {prices.length === 0 && <div className="col-span-5 text-white/25 text-xs">Loading...</div>}
           {prices.map(p => (
-            <div key={p.symbol} className="bg-white/2 border border-white/5 rounded-lg p-2.5">
-              <div className="text-white/50 text-xs mb-0.5">{p.name}</div>
-              <div className="text-white/85 text-sm font-medium">${p.price ? (p.price > 1000 ? p.price.toLocaleString('en-US',{maximumFractionDigits:0}) : p.price.toFixed(4)) : '—'}</div>
+            <div key={p.symbol} className="bg-white/10 border border-white/10 rounded-lg p-2.5">
+              <div className="text-white/60 text-xs mb-0.5">{p.name}</div>
+              <div className="text-white/90 text-sm font-medium">${p.price ? (p.price > 1000 ? p.price.toLocaleString('en-US',{maximumFractionDigits:0}) : p.price.toFixed(4)) : '—'}</div>
               <div className="flex items-center gap-1.5 mt-1">
                 <Spark change={p.change24h} />
                 <span className={`text-xs ${fc(p.change24h)}`}>{p.change24h !== null ? (p.change24h > 0 ? '+' : '') + p.change24h.toFixed(2) + '%' : '—'}</span>
@@ -159,27 +159,27 @@ function CryptoTab({ setups, prices: futPrices, onSetupSelect, onShowChart }: { 
 
       <div className="grid grid-cols-2 gap-3">
         {/* Setups */}
-        <div className="bg-[#0a0c10] border border-white/5 rounded-xl p-4">
+        <div className="bg-[#161b22] border border-white/10 rounded-xl p-4">
           <div className="flex justify-between items-center mb-3">
-            <span className="text-white/30 text-xs uppercase tracking-wider">ICT Setups · Crypto</span>
-            <span className="text-white/20 text-xs">{cryptoSetups.length}</span>
+            <span className="text-white/40 text-xs uppercase tracking-wider">ICT Setups · Crypto</span>
+            <span className="text-white/30 text-xs">{cryptoSetups.length}</span>
           </div>
           {cryptoSetups.length === 0 ? (
-            <div className="text-white/15 text-xs">No crypto setups. Run Scan with BTC/ETH symbols.</div>
+            <div className="text-white/25 text-xs">No crypto setups. Run Scan with BTC/ETH symbols.</div>
           ) : cryptoSetups.map(s => (
-            <button key={s.id} onClick={() => onSetupSelect(s)} className="w-full text-left border border-white/5 hover:border-white/10 rounded-lg px-3 py-2 mb-1.5 transition-colors">
+            <button key={s.id} onClick={() => onSetupSelect(s)} className="w-full text-left border border-white/10 hover:border-white/10 rounded-lg px-3 py-2 mb-1.5 transition-colors">
               <div className="flex justify-between items-center">
                 <div className="flex items-center gap-2">
-                  <span className="text-white/70 text-xs font-medium">{s.symbol}</span>
+                  <span className="text-white/80 text-xs font-medium">{s.symbol}</span>
                   <span className="text-xs" style={{color:dc(s.direction)}}>{s.direction}</span>
-                  <span className="text-white/30 text-xs">{s.setup_type}</span>
+                  <span className="text-white/40 text-xs">{s.setup_type}</span>
                 </div>
                 <div className="flex gap-2 items-center">
                   <Ring score={s.confluence_score}/>
-                  <button onClick={e=>{e.stopPropagation();onShowChart(s);}} className="text-white/20 hover:text-white/50 text-xs">chart</button>
+                  <button onClick={e=>{e.stopPropagation();onShowChart(s);}} className="text-white/30 hover:text-white/60 text-xs">chart</button>
                 </div>
               </div>
-              <div className="flex gap-3 text-xs text-white/25 mt-0.5">
+              <div className="flex gap-3 text-xs text-white/35 mt-0.5">
                 <span>E {f(s.entry_low)}–{f(s.entry_high)}</span>
                 <span className="text-red-400/50">SL {f(s.stop_loss)}</span>
                 <span className="text-green-400/50">TP {f(s.target)}</span>
@@ -189,30 +189,30 @@ function CryptoTab({ setups, prices: futPrices, onSetupSelect, onShowChart }: { 
         </div>
 
         {/* News Feed */}
-        <div className="bg-[#0a0c10] border border-white/5 rounded-xl p-4">
-          <div className="text-white/30 text-xs uppercase tracking-wider mb-3">Crypto News · MT Newswires</div>
+        <div className="bg-[#161b22] border border-white/10 rounded-xl p-4">
+          <div className="text-white/40 text-xs uppercase tracking-wider mb-3">Crypto News · MT Newswires</div>
           {news.length === 0 ? (
-            <div className="text-white/15 text-xs">Loading news...</div>
+            <div className="text-white/25 text-xs">Loading news...</div>
           ) : news.map((n,i) => (
-            <div key={i} className="border-b border-white/5 py-2 last:border-0">
-              <div className="text-white/60 text-xs leading-snug">{n.headline}</div>
-              <div className="text-white/20 text-xs mt-0.5">{n.release_time ? new Date(n.release_time).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'}) : ''} · {n.symbol}</div>
+            <div key={i} className="border-b border-white/10 py-2 last:border-0">
+              <div className="text-white/70 text-xs leading-snug">{n.headline}</div>
+              <div className="text-white/30 text-xs mt-0.5">{n.release_time ? new Date(n.release_time).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'}) : ''} · {n.symbol}</div>
             </div>
           ))}
         </div>
       </div>
 
       {/* 10 Year Backtest */}
-      <div className="bg-[#0a0c10] border border-white/5 rounded-xl p-4">
-        <div className="text-white/30 text-xs uppercase tracking-wider mb-3">10-Year ICT Pattern Backtest · Real Historical Data</div>
+      <div className="bg-[#161b22] border border-white/10 rounded-xl p-4">
+        <div className="text-white/40 text-xs uppercase tracking-wider mb-3">10-Year ICT Pattern Backtest · Real Historical Data</div>
         <div className="flex gap-3 items-end mb-3">
           <div>
-            <label className="text-white/20 text-xs block mb-1">Symbol</label>
-            <select className="bg-[#0d0f14] border border-white/8 rounded px-2 py-1.5 text-xs text-white/70 focus:outline-none" value={btForm.symbol} onChange={e=>setBtForm(p=>({...p,symbol:e.target.value}))}>
+            <label className="text-white/30 text-xs block mb-1">Symbol</label>
+            <select className="bg-[#1c2128] border border-white/15 rounded px-2 py-1.5 text-xs text-white/80 focus:outline-none" value={btForm.symbol} onChange={e=>setBtForm(p=>({...p,symbol:e.target.value}))}>
               {['BTCUSD','ETHUSD','SOLUSD','BNBUSD','XRPUSD'].map(s=><option key={s}>{s}</option>)}
             </select>
           </div>
-          <button onClick={runBt} disabled={btRunning} className="bg-white/5 hover:bg-white/8 disabled:opacity-40 text-white/60 text-xs px-4 py-1.5 rounded-lg transition-colors">
+          <button onClick={runBt} disabled={btRunning} className="bg-white/12 hover:bg-white/12 disabled:opacity-40 text-white/70 text-xs px-4 py-1.5 rounded-lg transition-colors">
             {btRunning ? 'Running 10 years...' : 'Run Deep Backtest'}
           </button>
         </div>
@@ -221,28 +221,28 @@ function CryptoTab({ setups, prices: futPrices, onSetupSelect, onShowChart }: { 
           <div>
             <div className="grid grid-cols-6 gap-2 text-xs mb-3">
               {[
-                ['Signals',btResult.total_signals,'text-white/60'],
+                ['Signals',btResult.total_signals,'text-white/70'],
                 ['Win Rate',btResult.win_rate+'%',btResult.win_rate>=55?'text-green-400/70':'text-red-400/70'],
                 ['Avg R:R',btResult.avg_rr+'R','text-blue-400/70'],
                 ['Profit Factor',btResult.profit_factor,'text-yellow-400/70'],
                 ['Best Year',btResult.best_year,'text-green-400/70'],
                 ['Worst Year',btResult.worst_year,'text-red-400/70'],
               ].map(([l,v,c])=>(
-                <div key={l as string} className="bg-white/3 rounded-lg p-2">
-                  <div className="text-white/20 mb-0.5">{l}</div>
+                <div key={l as string} className="bg-white/9 rounded-lg p-2">
+                  <div className="text-white/30 mb-0.5">{l}</div>
                   <div className={c as string}>{v}</div>
                 </div>
               ))}
             </div>
-            <div className="text-white/20 text-xs mb-2">Yearly breakdown:</div>
+            <div className="text-white/30 text-xs mb-2">Yearly breakdown:</div>
             <div className="flex flex-wrap gap-1.5">
               {Object.entries(btResult.yearly_breakdown).sort(([a],[b])=>a.localeCompare(b)).map(([yr,s])=>{
                 const wr = s.total > 0 ? Math.round((s.wins/s.total)*100) : 0;
                 return (
-                  <div key={yr} className="bg-white/3 rounded px-2 py-1 text-xs">
-                    <span className="text-white/30">{yr} </span>
+                  <div key={yr} className="bg-white/9 rounded px-2 py-1 text-xs">
+                    <span className="text-white/40">{yr} </span>
                     <span className={wr>=55?'text-green-400/60':'text-red-400/60'}>{wr}%</span>
-                    <span className="text-white/15"> ({s.total})</span>
+                    <span className="text-white/25"> ({s.total})</span>
                   </div>
                 );
               })}
@@ -299,14 +299,14 @@ function FuturesTab({ setups, prices, kz, news, onSetupSelect, onShowChart }: {
       <div className="col-span-12 grid grid-cols-6 gap-2">
         {[
           {l:'NQ',v:prices.NQ?.toFixed(1)??'—',c:prices.NQ&&prices.NQ>29000?'text-green-400/70':'text-red-400/70'},
-          {l:'ES',v:prices.ES?.toFixed(1)??'—',c:'text-white/60'},
+          {l:'ES',v:prices.ES?.toFixed(1)??'—',c:'text-white/70'},
           {l:'VIX',v:prices.VIX?.toFixed(2)??'—',c:prices.VIX&&prices.VIX>20?'text-red-400/70':'text-green-400/70'},
-          {l:'DXY',v:prices.DXY?.toFixed(3)??'—',c:'text-white/50'},
+          {l:'DXY',v:prices.DXY?.toFixed(3)??'—',c:'text-white/60'},
           {l:'Gold',v:prices.GC?.toFixed(1)??'—',c:'text-yellow-400/60'},
-          {l:'Session',v:kz?.active?.short??'OFF',c:kz?.active?'text-green-400/60':'text-white/20'},
+          {l:'Session',v:kz?.active?.short??'OFF',c:kz?.active?'text-green-400/60':'text-white/30'},
         ].map(s=>(
-          <div key={s.l} className="bg-[#0a0c10] border border-white/5 rounded-xl p-3">
-            <div className="text-white/25 text-xs mb-1">{s.l}</div>
+          <div key={s.l} className="bg-[#161b22] border border-white/10 rounded-xl p-3">
+            <div className="text-white/35 text-xs mb-1">{s.l}</div>
             <div className={`text-base font-medium ${s.c}`}>{s.v}</div>
           </div>
         ))}
@@ -314,10 +314,10 @@ function FuturesTab({ setups, prices, kz, news, onSetupSelect, onShowChart }: {
 
       {/* Setup list */}
       <div className="col-span-7 flex flex-col gap-2 overflow-hidden">
-        <div className="text-white/25 text-xs uppercase tracking-wider">Active Setups · {futSetups.length}</div>
+        <div className="text-white/35 text-xs uppercase tracking-wider">Active Setups · {futSetups.length}</div>
         <div className="overflow-y-auto flex-1 space-y-1.5">
           {futSetups.length === 0 && (
-            <div className="text-center py-12 text-white/15 text-sm">No setups — run Scan</div>
+            <div className="text-center py-12 text-white/25 text-sm">No setups — run Scan</div>
           )}
           {futSetups.map(s => {
             const p = prices[s.symbol as keyof Prices];
@@ -325,27 +325,27 @@ function FuturesTab({ setups, prices, kz, news, onSetupSelect, onShowChart }: {
             const slB = p !== null && (s.direction==='bull'?p<s.stop_loss:p>s.stop_loss);
             return (
               <button key={s.id} onClick={() => { setSel(s); setAi(s.ai_analysis||''); onSetupSelect(s); }}
-                className={`w-full text-left rounded-xl border px-4 py-3 transition-all ${sel?.id===s.id?'border-white/15 bg-white/3':'border-white/5 hover:border-white/10'} ${slB?'opacity-25':''}`}>
+                className={`w-full text-left rounded-xl border px-4 py-3 transition-all ${sel?.id===s.id?'border-white/15 bg-white/9':'border-white/10 hover:border-white/10'} ${slB?'opacity-25':''}`}>
                 <div className="flex items-center justify-between mb-1.5">
                   <div className="flex items-center gap-2.5">
-                    <span className="text-white/80 font-medium text-xs">{s.symbol}</span>
-                    <span className="text-white/25 text-xs">{s.timeframe}</span>
+                    <span className="text-white/85 font-medium text-xs">{s.symbol}</span>
+                    <span className="text-white/35 text-xs">{s.timeframe}</span>
                     <span className="text-xs font-medium" style={{color:dc(s.direction)}}>{s.direction}</span>
-                    <span className="text-white/35 text-xs">{s.setup_type}</span>
+                    <span className="text-white/45 text-xs">{s.setup_type}</span>
                   </div>
                   <div className="flex items-center gap-2">
                     {inZone && <span className="text-green-400/70 text-xs animate-pulse">ENTRY</span>}
                     {slB && <span className="text-red-400/70 text-xs">SL HIT</span>}
                     <Ring score={s.confluence_score}/>
-                    <button onClick={e=>{e.stopPropagation();onShowChart(s);}} className="text-white/20 hover:text-white/50 text-xs transition-colors">chart</button>
+                    <button onClick={e=>{e.stopPropagation();onShowChart(s);}} className="text-white/30 hover:text-white/60 text-xs transition-colors">chart</button>
                   </div>
                 </div>
-                <div className="flex gap-4 text-xs text-white/25">
-                  <span>E <span className="text-white/45">{f(s.entry_low)}–{f(s.entry_high)}</span></span>
+                <div className="flex gap-4 text-xs text-white/35">
+                  <span>E <span className="text-white/55">{f(s.entry_low)}–{f(s.entry_high)}</span></span>
                   <span>SL <span className="text-red-400/50">{f(s.stop_loss)}</span></span>
                   <span>TP <span className="text-green-400/50">{f(s.target)}</span></span>
                   <span>{f(s.rr_ratio,1)}R</span>
-                  <span className="ml-auto text-white/20">{s.cisd_confirmed?'cisd✓':'cisd○'} · {s.htf_bias?.slice(0,4)}</span>
+                  <span className="ml-auto text-white/30">{s.cisd_confirmed?'cisd✓':'cisd○'} · {s.htf_bias?.slice(0,4)}</span>
                 </div>
               </button>
             );
@@ -355,30 +355,30 @@ function FuturesTab({ setups, prices, kz, news, onSetupSelect, onShowChart }: {
 
       {/* AI + DOL */}
       <div className="col-span-5 flex flex-col gap-3 overflow-hidden">
-        <div className="bg-[#0a0c10] border border-white/5 rounded-xl p-3 shrink-0">
-          <div className="text-white/25 text-xs uppercase tracking-wider mb-2.5">DOL Framework</div>
+        <div className="bg-[#161b22] border border-white/10 rounded-xl p-3 shrink-0">
+          <div className="text-white/35 text-xs uppercase tracking-wider mb-2.5">DOL Framework</div>
           {dolQ.length > 0 ? dolQ.map((q,i) => (
             <div key={i} className="flex gap-2 text-xs py-0.5">
-              <span className="text-white/15 w-4 shrink-0">{i+1}</span>
-              <span className="text-white/20 w-20 shrink-0">{q.q}</span>
-              <span className={`text-white/50 ${i===4&&!sel?.cisd_confirmed?'text-yellow-400/60':''}`}>{q.a}</span>
+              <span className="text-white/25 w-4 shrink-0">{i+1}</span>
+              <span className="text-white/30 w-20 shrink-0">{q.q}</span>
+              <span className={`text-white/60 ${i===4&&!sel?.cisd_confirmed?'text-yellow-400/60':''}`}>{q.a}</span>
             </div>
-          )) : <div className="text-white/12 text-xs">Select a setup</div>}
+          )) : <div className="text-white/20 text-xs">Select a setup</div>}
         </div>
-        <div className="bg-[#0a0c10] border border-white/5 rounded-xl p-3 flex-1 flex flex-col min-h-0">
+        <div className="bg-[#161b22] border border-white/10 rounded-xl p-3 flex-1 flex flex-col min-h-0">
           <div className="flex items-center justify-between mb-2.5 shrink-0">
-            <span className="text-white/25 text-xs uppercase tracking-wider">AI Analyst · ICT Methodology</span>
-            <button onClick={runAI} disabled={!sel||aiLoad} className="text-xs px-3 py-1 bg-white/5 hover:bg-white/8 disabled:opacity-30 text-white/50 rounded-lg transition-colors">{aiLoad?'...':'Analyse'}</button>
+            <span className="text-white/35 text-xs uppercase tracking-wider">AI Analyst · ICT Methodology</span>
+            <button onClick={runAI} disabled={!sel||aiLoad} className="text-xs px-3 py-1 bg-white/12 hover:bg-white/12 disabled:opacity-30 text-white/60 rounded-lg transition-colors">{aiLoad?'...':'Analyse'}</button>
           </div>
-          {sel && <div className="text-white/25 text-xs mb-2 shrink-0">{sel.symbol} · {sel.setup_type}</div>}
+          {sel && <div className="text-white/35 text-xs mb-2 shrink-0">{sel.symbol} · {sel.setup_type}</div>}
           <div className="flex-1 overflow-y-auto">
-            {ai ? <pre className={`text-xs leading-relaxed whitespace-pre-wrap ${ai.startsWith('INVALIDATED')?'text-red-400/60':'text-white/55'}`}>{ai}</pre>
-              : <div className="text-white/10 text-xs">{sel?'Hit Analyse':'Select a setup'}</div>}
+            {ai ? <pre className={`text-xs leading-relaxed whitespace-pre-wrap ${ai.startsWith('INVALIDATED')?'text-red-400/60':'text-white/65'}`}>{ai}</pre>
+              : <div className="text-white/18 text-xs">{sel?'Hit Analyse':'Select a setup'}</div>}
           </div>
         </div>
 
         {/* Killzones */}
-        <div className="bg-[#0a0c10] border border-white/5 rounded-xl p-3 shrink-0">
+        <div className="bg-[#161b22] border border-white/10 rounded-xl p-3 shrink-0">
           <div className="grid grid-cols-6 gap-1 mb-2">
             {[{s:'ASIA',c:'#6366f1'},{s:'LON',c:'#f59e0b'},{s:'NY',c:'#22c55e'},{s:'SB',c:'#3b82f6'},{s:'LCL',c:'#ef4444'},{s:'NYA',c:'#a855f7'}].map(z=>{
               const isA=kz?.active?.short===z.s;
@@ -389,7 +389,7 @@ function FuturesTab({ setups, prices, kz, news, onSetupSelect, onShowChart }: {
             })}
           </div>
           {news.filter((_,i)=>i<4).map((e,i)=>(
-            <div key={i} className={`flex justify-between text-xs py-0.5 ${e.isDangerZone?'text-red-400/70 animate-pulse':e.isToday?'text-yellow-400/50':'text-white/15'}`}>
+            <div key={i} className={`flex justify-between text-xs py-0.5 ${e.isDangerZone?'text-red-400/70 animate-pulse':e.isToday?'text-yellow-400/50':'text-white/25'}`}>
               <span className="truncate mr-2">{e.name}</span>
               <span className="shrink-0">{e.isToday?(e.minutesAway!==null?(e.minutesAway>0?`${e.minutesAway}m`:`${Math.abs(e.minutesAway)}m ago`):'TODAY'):e.date}</span>
             </div>
@@ -404,11 +404,11 @@ function FuturesTab({ setups, prices, kz, news, onSetupSelect, onShowChart }: {
 function ComingSoonTab({ name, items }: { name: string; items: string[] }) {
   return (
     <div className="h-full flex flex-col items-center justify-center gap-4">
-      <div className="text-white/20 text-sm font-medium">{name}</div>
-      <div className="text-white/10 text-xs max-w-sm text-center leading-relaxed">
+      <div className="text-white/30 text-sm font-medium">{name}</div>
+      <div className="text-white/18 text-xs max-w-sm text-center leading-relaxed">
         Live data for this section requires FMP Starter plan upgrade at financialmodelingprep.com/developer/docs/pricing
       </div>
-      <div className="bg-[#0a0c10] border border-white/5 rounded-xl p-4 text-xs text-white/20 space-y-1.5 max-w-sm w-full">
+      <div className="bg-[#161b22] border border-white/10 rounded-xl p-4 text-xs text-white/30 space-y-1.5 max-w-sm w-full">
         {items.map(i => <div key={i}>· {i}</div>)}
       </div>
     </div>
@@ -425,29 +425,29 @@ function ScanModal({ prices, kz, onClose, onSaved }: { prices:Prices; kz:KZ|null
   const togS=(s:string)=>setSyms(p=>p.includes(s)?p.filter(x=>x!==s):[...p,s]);
   const togT=(t:string)=>setTfs(p=>p.includes(t)?p.filter(x=>x!==t):[...p,t]);
   const scan=async()=>{ setLoading(true);setResult(null);setErr(''); try{ const r=await fetch('/api/autoscan',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({symbols:syms,timeframes:tfs,currentPrices:prices})}); const d=await r.json(); if(d.error)setErr(typeof d.error==='string'?d.error:JSON.stringify(d.error)); else setResult(d); }catch(e){setErr(String(e));} setLoading(false); };
-  const btn=(active:boolean)=>`text-xs px-3 py-1.5 rounded-lg border transition-colors ${active?'border-white/20 bg-white/8 text-white/80':'border-white/5 text-white/30 hover:border-white/10'}`;
+  const btn=(active:boolean)=>`text-xs px-3 py-1.5 rounded-lg border transition-colors ${active?'border-white/20 bg-white/12 text-white/85':'border-white/10 text-white/40 hover:border-white/10'}`;
   return (
     <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50" onClick={onClose}>
-      <div className="bg-[#0a0c10] border border-white/8 rounded-xl p-5 w-96 max-h-[85vh] overflow-y-auto" onClick={e=>e.stopPropagation()}>
-        <div className="flex justify-between items-center mb-4"><span className="text-white/80 text-sm font-medium">Auto Scan · Live Market</span><button onClick={onClose} className="text-white/30 hover:text-white/60 text-lg">×</button></div>
-        <div className="grid grid-cols-2 gap-2 bg-white/3 rounded-lg p-3 text-xs mb-4">
-          {(['NQ','ES','GC','DXY'] as const).map(s=><div key={s} className="flex justify-between"><span className="text-white/30">{s}</span><span className="text-white/60">{prices[s]?.toFixed(s==='DXY'?3:1)??'—'}</span></div>)}
+      <div className="bg-[#161b22] border border-white/15 rounded-xl p-5 w-96 max-h-[85vh] overflow-y-auto" onClick={e=>e.stopPropagation()}>
+        <div className="flex justify-between items-center mb-4"><span className="text-white/85 text-sm font-medium">Auto Scan · Live Market</span><button onClick={onClose} className="text-white/40 hover:text-white/70 text-lg">×</button></div>
+        <div className="grid grid-cols-2 gap-2 bg-white/9 rounded-lg p-3 text-xs mb-4">
+          {(['NQ','ES','GC','DXY'] as const).map(s=><div key={s} className="flex justify-between"><span className="text-white/40">{s}</span><span className="text-white/70">{prices[s]?.toFixed(s==='DXY'?3:1)??'—'}</span></div>)}
         </div>
-        <div className="mb-3"><div className="text-white/25 text-xs mb-2">Symbols</div><div className="flex flex-wrap gap-2">{['NQ','ES','BTC','ETH','SOL'].map(s=><button key={s} onClick={()=>togS(s)} className={btn(syms.includes(s))}>{s}</button>)}</div></div>
-        <div className="mb-4"><div className="text-white/25 text-xs mb-2">Timeframes</div><div className="flex gap-2">{['15m','1h','4h'].map(t=><button key={t} onClick={()=>togT(t)} className={btn(tfs.includes(t))}>{t}</button>)}</div></div>
-        <button onClick={scan} disabled={loading||!syms.length||!tfs.length} className="w-full bg-white/5 hover:bg-white/8 disabled:opacity-40 text-white/70 text-sm py-2.5 rounded-lg font-medium mb-4 transition-colors">{loading?'Scanning live candles...':'Scan Now'}</button>
+        <div className="mb-3"><div className="text-white/35 text-xs mb-2">Symbols</div><div className="flex flex-wrap gap-2">{['NQ','ES','BTC','ETH','SOL'].map(s=><button key={s} onClick={()=>togS(s)} className={btn(syms.includes(s))}>{s}</button>)}</div></div>
+        <div className="mb-4"><div className="text-white/35 text-xs mb-2">Timeframes</div><div className="flex gap-2">{['15m','1h','4h'].map(t=><button key={t} onClick={()=>togT(t)} className={btn(tfs.includes(t))}>{t}</button>)}</div></div>
+        <button onClick={scan} disabled={loading||!syms.length||!tfs.length} className="w-full bg-white/12 hover:bg-white/12 disabled:opacity-40 text-white/80 text-sm py-2.5 rounded-lg font-medium mb-4 transition-colors">{loading?'Scanning live candles...':'Scan Now'}</button>
         {err&&<div className="text-red-400/60 text-xs bg-red-500/5 rounded p-2 mb-3">{err}</div>}
         {result&&(
           <div className={`rounded-lg p-3 text-xs ${result.count>0?'bg-green-500/5 border border-green-500/15':'bg-yellow-500/5 border border-yellow-500/15'}`}>
             <div className={`font-medium mb-2 ${result.count>0?'text-green-400/80':'text-yellow-400/80'}`}>{result.message}</div>
             {result.setups?.map((s,i)=>(
-              <div key={i} className="border-t border-white/5 pt-2 mt-2 first:border-0 first:mt-0 first:pt-0">
-                <div className="flex justify-between mb-0.5"><span className="text-white/60 font-medium">{s.symbol} {s.timeframe}</span><span style={{color:dc(s.direction)}} className="text-xs">{s.direction.toUpperCase()}</span></div>
-                <div className="text-white/35">{s.setup_type}</div>
-                <div className="flex gap-3 mt-1 text-white/30"><span>E:{f(s.entry_low)}–{f(s.entry_high)}</span><span className="text-red-400/50">SL:{f(s.stop_loss)}</span><span className="text-green-400/50">TP:{f(s.target)}</span><span className="text-blue-400/50">{f(s.rr_ratio,1)}R</span></div>
+              <div key={i} className="border-t border-white/10 pt-2 mt-2 first:border-0 first:mt-0 first:pt-0">
+                <div className="flex justify-between mb-0.5"><span className="text-white/70 font-medium">{s.symbol} {s.timeframe}</span><span style={{color:dc(s.direction)}} className="text-xs">{s.direction.toUpperCase()}</span></div>
+                <div className="text-white/45">{s.setup_type}</div>
+                <div className="flex gap-3 mt-1 text-white/40"><span>E:{f(s.entry_low)}–{f(s.entry_high)}</span><span className="text-red-400/50">SL:{f(s.stop_loss)}</span><span className="text-green-400/50">TP:{f(s.target)}</span><span className="text-blue-400/50">{f(s.rr_ratio,1)}R</span></div>
               </div>
             ))}
-            {result.count>0&&<button onClick={()=>{onSaved();onClose();}} className="w-full mt-3 bg-white/5 hover:bg-white/8 text-white/50 text-xs py-1.5 rounded-lg">View setups</button>}
+            {result.count>0&&<button onClick={()=>{onSaved();onClose();}} className="w-full mt-3 bg-white/12 hover:bg-white/12 text-white/60 text-xs py-1.5 rounded-lg">View setups</button>}
           </div>
         )}
       </div>
@@ -465,19 +465,19 @@ function KnowledgeTab() {
   const filtered = articles.filter(a => !search || a.title?.toLowerCase().includes(search.toLowerCase()) || a.content?.toLowerCase().includes(search.toLowerCase()));
   return (
     <div className="flex flex-col gap-3 h-full overflow-hidden">
-      <input placeholder="Search ICT concepts..." value={search} onChange={e=>setSearch(e.target.value)} className="bg-[#0a0c10] border border-white/8 rounded-lg px-3 py-1.5 text-xs text-white/60 placeholder-white/15 focus:outline-none focus:border-white/20 shrink-0"/>
-      <div className="text-white/20 text-xs shrink-0">{filtered.length} of {articles.length} articles · from your 8 ICT videos</div>
+      <input placeholder="Search ICT concepts..." value={search} onChange={e=>setSearch(e.target.value)} className="bg-[#161b22] border border-white/15 rounded-lg px-3 py-1.5 text-xs text-white/70 placeholder-white/15 focus:outline-none focus:border-white/20 shrink-0"/>
+      <div className="text-white/30 text-xs shrink-0">{filtered.length} of {articles.length} articles · from your 8 ICT videos</div>
       <div className="overflow-y-auto flex-1">
         <div className="grid grid-cols-2 gap-2 pb-4">
           {filtered.map(a => (
-            <div key={a.id} className={`bg-[#0a0c10] border rounded-xl p-3 ${a.is_user_note?'border-blue-500/10':'border-white/5'}`}>
+            <div key={a.id} className={`bg-[#161b22] border rounded-xl p-3 ${a.is_user_note?'border-blue-500/10':'border-white/10'}`}>
               <div className="flex justify-between items-start mb-1.5">
-                <span className="text-white/70 text-xs font-medium">{a.title}</span>
-                <span className="text-white/20 text-xs ml-2 shrink-0">{a.source_episode}</span>
+                <span className="text-white/80 text-xs font-medium">{a.title}</span>
+                <span className="text-white/30 text-xs ml-2 shrink-0">{a.source_episode}</span>
               </div>
-              <span className="text-xs px-1.5 py-0.5 rounded bg-white/4 text-white/20">{a.category}</span>
-              <p className="text-white/35 text-xs mt-2 leading-relaxed">{a.content}</p>
-              {a.tags?.length>0&&<div className="flex gap-1 flex-wrap mt-2">{a.tags.map((t:string)=><span key={t} className="text-xs text-white/15 bg-white/3 px-1.5 py-0.5 rounded">{t}</span>)}</div>}
+              <span className="text-xs px-1.5 py-0.5 rounded bg-white/10 text-white/30">{a.category}</span>
+              <p className="text-white/45 text-xs mt-2 leading-relaxed">{a.content}</p>
+              {a.tags?.length>0&&<div className="flex gap-1 flex-wrap mt-2">{a.tags.map((t:string)=><span key={t} className="text-xs text-white/25 bg-white/9 px-1.5 py-0.5 rounded">{t}</span>)}</div>}
             </div>
           ))}
         </div>
@@ -491,40 +491,40 @@ function JournalTab() {
   const [entries, setEntries] = useState<{id:string;date:string;title:string;content:string;emotion:string;result:string}[]>([]);
   const [form, setForm] = useState({date:new Date().toISOString().slice(0,10),title:'',content:'',emotion:'neutral',result:'no trade'});
   const [adding, setAdding] = useState(false), [saving, setSaving] = useState(false);
-  const inp="w-full bg-[#0d0f14] border border-white/8 rounded px-2 py-1.5 text-xs text-white/70 focus:outline-none focus:border-white/20";
+  const inp="w-full bg-[#1c2128] border border-white/15 rounded px-2 py-1.5 text-xs text-white/80 focus:outline-none focus:border-white/20";
   useEffect(()=>{ sb.from('journal').select('*').order('date',{ascending:false}).limit(50).then(({data})=>{if(data)setEntries(data as typeof entries);}); },[]);
   const save=async()=>{ if(!form.title||!form.content)return; setSaving(true); const {data}=await sb.from('journal').insert(form).select(); if(data){setEntries(p=>[data[0] as typeof entries[0],...p]);setAdding(false);setForm({date:new Date().toISOString().slice(0,10),title:'',content:'',emotion:'neutral',result:'no trade'});} setSaving(false); };
-  const eC=(e:string)=>e==='confident'?'text-green-400/60':e==='patient'?'text-blue-400/60':(e==='fomo'||e==='revenge'||e==='anxious')?'text-red-400/60':'text-white/30';
-  const rC=(r:string)=>r==='win'?'text-green-400/60':r==='loss'?'text-red-400/60':r==='be'?'text-yellow-400/60':'text-white/20';
+  const eC=(e:string)=>e==='confident'?'text-green-400/60':e==='patient'?'text-blue-400/60':(e==='fomo'||e==='revenge'||e==='anxious')?'text-red-400/60':'text-white/40';
+  const rC=(r:string)=>r==='win'?'text-green-400/60':r==='loss'?'text-red-400/60':r==='be'?'text-yellow-400/60':'text-white/30';
   return (
     <div className="flex flex-col gap-3 h-full overflow-hidden">
       <div className="flex justify-between items-center shrink-0">
-        <span className="text-white/30 text-xs uppercase tracking-wider">Journal</span>
-        <button onClick={()=>setAdding(true)} className="text-xs px-3 py-1.5 bg-white/5 hover:bg-white/8 text-white/50 rounded-lg transition-colors">+ Entry</button>
+        <span className="text-white/40 text-xs uppercase tracking-wider">Journal</span>
+        <button onClick={()=>setAdding(true)} className="text-xs px-3 py-1.5 bg-white/12 hover:bg-white/12 text-white/60 rounded-lg transition-colors">+ Entry</button>
       </div>
       {adding&&(
-        <div className="bg-[#0a0c10] border border-white/8 rounded-xl p-4 shrink-0">
+        <div className="bg-[#161b22] border border-white/15 rounded-xl p-4 shrink-0">
           <div className="grid grid-cols-3 gap-2 mb-3">
-            <div><label className="text-white/25 text-xs block mb-1">Date</label><input type="date" className={inp} value={form.date} onChange={e=>setForm(p=>({...p,date:e.target.value}))}/></div>
-            <div><label className="text-white/25 text-xs block mb-1">Emotion</label><select className={inp} value={form.emotion} onChange={e=>setForm(p=>({...p,emotion:e.target.value}))}><option value="confident">Confident</option><option value="patient">Patient</option><option value="neutral">Neutral</option><option value="anxious">Anxious</option><option value="fomo">FOMO</option><option value="revenge">Revenge</option></select></div>
-            <div><label className="text-white/25 text-xs block mb-1">Result</label><select className={inp} value={form.result} onChange={e=>setForm(p=>({...p,result:e.target.value}))}><option value="win">Win</option><option value="loss">Loss</option><option value="be">BE</option><option value="no trade">No Trade</option></select></div>
+            <div><label className="text-white/35 text-xs block mb-1">Date</label><input type="date" className={inp} value={form.date} onChange={e=>setForm(p=>({...p,date:e.target.value}))}/></div>
+            <div><label className="text-white/35 text-xs block mb-1">Emotion</label><select className={inp} value={form.emotion} onChange={e=>setForm(p=>({...p,emotion:e.target.value}))}><option value="confident">Confident</option><option value="patient">Patient</option><option value="neutral">Neutral</option><option value="anxious">Anxious</option><option value="fomo">FOMO</option><option value="revenge">Revenge</option></select></div>
+            <div><label className="text-white/35 text-xs block mb-1">Result</label><select className={inp} value={form.result} onChange={e=>setForm(p=>({...p,result:e.target.value}))}><option value="win">Win</option><option value="loss">Loss</option><option value="be">BE</option><option value="no trade">No Trade</option></select></div>
           </div>
-          <div className="mb-2"><label className="text-white/25 text-xs block mb-1">Title</label><input className={inp} value={form.title} onChange={e=>setForm(p=>({...p,title:e.target.value}))}/></div>
-          <div className="mb-3"><label className="text-white/25 text-xs block mb-1">Notes</label><textarea className={inp+' resize-none'} rows={3} value={form.content} onChange={e=>setForm(p=>({...p,content:e.target.value}))}/></div>
-          <div className="flex gap-2"><button onClick={save} disabled={saving} className="flex-1 bg-white/8 hover:bg-white/12 disabled:opacity-40 text-white/70 text-xs py-1.5 rounded-lg">{saving?'Saving...':'Save'}</button><button onClick={()=>setAdding(false)} className="px-4 bg-white/3 text-white/30 text-xs rounded-lg">Cancel</button></div>
+          <div className="mb-2"><label className="text-white/35 text-xs block mb-1">Title</label><input className={inp} value={form.title} onChange={e=>setForm(p=>({...p,title:e.target.value}))}/></div>
+          <div className="mb-3"><label className="text-white/35 text-xs block mb-1">Notes</label><textarea className={inp+' resize-none'} rows={3} value={form.content} onChange={e=>setForm(p=>({...p,content:e.target.value}))}/></div>
+          <div className="flex gap-2"><button onClick={save} disabled={saving} className="flex-1 bg-white/12 hover:bg-white/12 disabled:opacity-40 text-white/80 text-xs py-1.5 rounded-lg">{saving?'Saving...':'Save'}</button><button onClick={()=>setAdding(false)} className="px-4 bg-white/9 text-white/40 text-xs rounded-lg">Cancel</button></div>
         </div>
       )}
       <div className="overflow-y-auto flex-1 space-y-2 pb-4">
         {entries.map(e=>(
-          <div key={e.id} className="bg-[#0a0c10] border border-white/5 rounded-xl p-4">
+          <div key={e.id} className="bg-[#161b22] border border-white/10 rounded-xl p-4">
             <div className="flex justify-between mb-1.5">
-              <div><span className="text-white/65 text-xs font-medium">{e.title}</span><span className="text-white/20 text-xs ml-2">{e.date}</span></div>
+              <div><span className="text-white/65 text-xs font-medium">{e.title}</span><span className="text-white/30 text-xs ml-2">{e.date}</span></div>
               <div className="flex gap-2 text-xs"><span className={eC(e.emotion)}>{e.emotion}</span><span className={rC(e.result)}>{e.result?.toUpperCase()}</span></div>
             </div>
-            <p className="text-white/30 text-xs leading-relaxed whitespace-pre-wrap">{e.content}</p>
+            <p className="text-white/40 text-xs leading-relaxed whitespace-pre-wrap">{e.content}</p>
           </div>
         ))}
-        {!entries.length&&!adding&&<div className="text-center py-16 text-white/12 text-sm">No entries yet</div>}
+        {!entries.length&&!adding&&<div className="text-center py-16 text-white/20 text-sm">No entries yet</div>}
       </div>
     </div>
   );
@@ -570,43 +570,43 @@ export default function App() {
   }, [prices, setups, addAlert]);
 
   const dangerNews = news.some(e=>e.isDangerZone);
-  const alertStyle=(t:string)=>t==='r'?'border-red-500/20 bg-red-500/8 text-red-300/70':t==='g'?'border-green-500/20 bg-green-500/8 text-green-300/70':'border-white/10 bg-white/5 text-white/50';
+  const alertStyle=(t:string)=>t==='r'?'border-red-500/20 bg-red-500/8 text-red-300/70':t==='g'?'border-green-500/20 bg-green-500/8 text-green-300/70':'border-white/10 bg-white/12 text-white/60';
 
   const handleSetupSelect = (s: Setup) => { setChartSetup(s); };
   const handleShowChart = (s: Setup) => { setChartSym(s.symbol.includes('BTC')||s.symbol.includes('ETH')?'BTC':'NQ'); setChartSetup(s); setPlatTab('Chart'); };
 
   return (
-    <div className="h-screen bg-[#060810] text-white font-mono text-sm flex flex-col overflow-hidden">
+    <div className="h-screen bg-[#0f1117] text-white font-mono text-sm flex flex-col overflow-hidden">
       {/* Alerts */}
       <div className="fixed top-11 right-3 z-50 flex flex-col gap-1.5 pointer-events-none">
         {alerts.map(a=><div key={a.id} className={`text-xs px-3 py-1.5 rounded-lg border ${alertStyle(a.type)}`}>{a.msg}</div>)}
       </div>
 
       {/* HEADER */}
-      <header className="border-b border-white/5 px-5 h-11 flex items-center justify-between shrink-0">
+      <header className="border-b border-white/10 px-5 h-11 flex items-center justify-between shrink-0">
         <div className="flex items-center gap-3">
-          <span className="text-white/85 font-bold tracking-widest text-sm">VECTOR</span>
+          <span className="text-white/90 font-bold tracking-widest text-sm">VECTOR</span>
           <span className="w-1.5 h-1.5 rounded-full bg-green-400/60 animate-pulse"></span>
         </div>
         <div className="flex items-center gap-5 text-xs">
           {dangerNews&&<span className="text-red-400/70 animate-pulse text-xs">NEWS RISK</span>}
           {kz?.active ? <span className="text-xs px-2 py-0.5 rounded" style={{color:kz.active.color,background:kz.active.color+'12'}}>{kz.active.short} · {kz.probability}</span>
-            : <span className="text-white/15 text-xs">{kz?.upcoming[0]?`${kz.upcoming[0].short} ${kz.upcoming[0].minsAway}m`:'off hours'}</span>}
+            : <span className="text-white/25 text-xs">{kz?.upcoming[0]?`${kz.upcoming[0].short} ${kz.upcoming[0].minsAway}m`:'off hours'}</span>}
           <div className="flex items-center gap-4">
             {(['NQ','ES','GC','DXY','VIX'] as const).map(sym=>{
               const p=prices[sym],pp=prev[sym],up=p!==null&&pp!==null&&p>pp,dn=p!==null&&pp!==null&&p<pp;
-              return <span key={sym} className={`${up?'text-green-400/70':dn?'text-red-400/70':'text-white/25'}`}>{sym} {p!==null?p.toFixed(sym==='VIX'?2:1):'—'}</span>;
+              return <span key={sym} className={`${up?'text-green-400/70':dn?'text-red-400/70':'text-white/35'}`}>{sym} {p!==null?p.toFixed(sym==='VIX'?2:1):'—'}</span>;
             })}
           </div>
-          <span className="text-white/12">NY {kz?.nyTime??''}</span>
+          <span className="text-white/20">NY {kz?.nyTime??''}</span>
         </div>
       </header>
 
       {/* NAV */}
-      <nav className="border-b border-white/5 px-5 flex items-center h-9 shrink-0">
-        {PLATFORM_TABS.map(t=><button key={t} onClick={()=>setPlatTab(t)} className={`px-3 h-full text-xs border-b transition-colors ${platTab===t?'border-white/35 text-white/75':'border-transparent text-white/22 hover:text-white/45'}`}>{t}</button>)}
+      <nav className="border-b border-white/10 px-5 flex items-center h-9 shrink-0">
+        {PLATFORM_TABS.map(t=><button key={t} onClick={()=>setPlatTab(t)} className={`px-3 h-full text-xs border-b transition-colors ${platTab===t?'border-white/35 text-white/75':'border-transparent text-white/42 hover:text-white/55'}`}>{t}</button>)}
         <div className="ml-auto flex gap-2">
-          <button onClick={()=>setShowScan(true)} className="text-xs px-3 py-1 rounded-lg border border-white/8 text-white/35 hover:text-white/55 hover:border-white/15 transition-colors">Scan</button>
+          <button onClick={()=>setShowScan(true)} className="text-xs px-3 py-1 rounded-lg border border-white/15 text-white/45 hover:text-white/65 hover:border-white/15 transition-colors">Scan</button>
         </div>
       </nav>
 
@@ -618,9 +618,9 @@ export default function App() {
         {platTab === 'Markets' && (
           <div className="flex flex-col h-full gap-0">
             {/* Market section tabs */}
-            <div className="flex gap-0 mb-3 shrink-0 border-b border-white/5 pb-2">
+            <div className="flex gap-0 mb-3 shrink-0 border-b border-white/10 pb-2">
               {MARKET_TABS.map(t => (
-                <button key={t} onClick={()=>setMktTab(t)} className={`px-4 py-1.5 text-xs rounded-lg mr-1 transition-colors ${mktTab===t?'bg-white/8 text-white/75':'text-white/25 hover:text-white/45'}`}>{t}</button>
+                <button key={t} onClick={()=>setMktTab(t)} className={`px-4 py-1.5 text-xs rounded-lg mr-1 transition-colors ${mktTab===t?'bg-white/12 text-white/75':'text-white/35 hover:text-white/55'}`}>{t}</button>
               ))}
             </div>
             <div className="flex-1 overflow-hidden min-h-0">
@@ -636,23 +636,23 @@ export default function App() {
         {platTab === 'Chart' && (
           <div className="flex flex-col gap-3 h-full">
             <div className="flex gap-2 items-center shrink-0">
-              <div className="flex gap-1">{['NQ','ES','BTC','ETH'].map(s=><button key={s} onClick={()=>{setChartSym(s);setChartSetup(null);}} className={`text-xs px-2.5 py-1 rounded-lg border transition-colors ${chartSym===s?'border-white/20 bg-white/5 text-white/70':'border-white/5 text-white/25 hover:border-white/10'}`}>{s}</button>)}</div>
-              <div className="flex gap-1">{['15m','1h','4h','D'].map(t=><button key={t} onClick={()=>setChartTf(t)} className={`text-xs px-2.5 py-1 rounded-lg border transition-colors ${chartTf===t?'border-white/20 bg-white/5 text-white/70':'border-white/5 text-white/25 hover:border-white/10'}`}>{t}</button>)}</div>
-              {chartSetup && <div className="flex items-center gap-2 px-2.5 py-1 rounded-lg border border-white/8 text-xs ml-2"><span style={{color:dc(chartSetup.direction)}}>●</span><span className="text-white/45">{chartSetup.symbol} {chartSetup.setup_type}</span><button onClick={()=>setChartSetup(null)} className="text-white/20 hover:text-white/50 ml-1">×</button></div>}
-              <button onClick={()=>setShowScan(true)} className="ml-auto text-xs px-2.5 py-1 rounded-lg border border-white/8 text-white/30 hover:text-white/50 transition-colors">Scan</button>
+              <div className="flex gap-1">{['NQ','ES','BTC','ETH'].map(s=><button key={s} onClick={()=>{setChartSym(s);setChartSetup(null);}} className={`text-xs px-2.5 py-1 rounded-lg border transition-colors ${chartSym===s?'border-white/20 bg-white/12 text-white/80':'border-white/10 text-white/35 hover:border-white/10'}`}>{s}</button>)}</div>
+              <div className="flex gap-1">{['15m','1h','4h','D'].map(t=><button key={t} onClick={()=>setChartTf(t)} className={`text-xs px-2.5 py-1 rounded-lg border transition-colors ${chartTf===t?'border-white/20 bg-white/12 text-white/80':'border-white/10 text-white/35 hover:border-white/10'}`}>{t}</button>)}</div>
+              {chartSetup && <div className="flex items-center gap-2 px-2.5 py-1 rounded-lg border border-white/15 text-xs ml-2"><span style={{color:dc(chartSetup.direction)}}>●</span><span className="text-white/55">{chartSetup.symbol} {chartSetup.setup_type}</span><button onClick={()=>setChartSetup(null)} className="text-white/30 hover:text-white/60 ml-1">×</button></div>}
+              <button onClick={()=>setShowScan(true)} className="ml-auto text-xs px-2.5 py-1 rounded-lg border border-white/15 text-white/40 hover:text-white/60 transition-colors">Scan</button>
             </div>
-            {chartSetup && <div className="flex gap-5 text-xs shrink-0 text-white/25">
+            {chartSetup && <div className="flex gap-5 text-xs shrink-0 text-white/35">
               <span>Entry <span className="text-green-400/55">{f(chartSetup.entry_low)}–{f(chartSetup.entry_high)}</span></span>
               <span>SL <span className="text-red-400/55">{f(chartSetup.stop_loss)}</span></span>
               <span>TP <span className="text-blue-400/55">{f(chartSetup.target)}</span></span>
               <span>{f(chartSetup.rr_ratio,1)}R · {chartSetup.cisd_confirmed?'CISD confirmed':'CISD pending'}</span>
             </div>}
-            <div className="flex-1 bg-[#0a0c10] border border-white/5 rounded-xl overflow-hidden min-h-0">
+            <div className="flex-1 bg-[#161b22] border border-white/10 rounded-xl overflow-hidden min-h-0">
               <CandleChart sym={chartSym} tf={chartTf} setup={chartSetup}/>
             </div>
             <div className="flex gap-2 flex-wrap shrink-0">
               {setups.filter(s=>s.symbol===chartSym||s.symbol.includes(chartSym)).map(s=>(
-                <button key={s.id} onClick={()=>setChartSetup(s)} className={`text-xs px-2 py-1 rounded-lg border transition-colors ${chartSetup?.id===s.id?'border-white/20 bg-white/5 text-white/60':'border-white/5 text-white/20 hover:border-white/10'}`}>
+                <button key={s.id} onClick={()=>setChartSetup(s)} className={`text-xs px-2 py-1 rounded-lg border transition-colors ${chartSetup?.id===s.id?'border-white/20 bg-white/12 text-white/70':'border-white/10 text-white/30 hover:border-white/10'}`}>
                   <span style={{color:dc(s.direction)}}>{s.direction}</span> {s.timeframe} · {s.setup_type.slice(0,14)}
                 </button>
               ))}
@@ -662,19 +662,19 @@ export default function App() {
 
         {platTab === 'MMXM' && (
           <div className="flex flex-col gap-3 overflow-y-auto h-full pb-4">
-            <div className="bg-[#0a0c10] border border-white/5 rounded-xl p-4">
-              <div className="text-white/30 text-xs uppercase tracking-wider mb-3">AMD Model Reference · From Your ICT Videos</div>
+            <div className="bg-[#161b22] border border-white/10 rounded-xl p-4">
+              <div className="text-white/40 text-xs uppercase tracking-wider mb-3">AMD Model Reference · From Your ICT Videos</div>
               <div className="grid grid-cols-3 gap-3">
                 {[['Accumulation','Asia session. Range building. Liquidity stacks above and below. Smart money positions silently. No direction bias yet.','rgba(99,102,241,0.5)'],['Manipulation','London open. Judas swing. Price engineered to sweep SSL or BSL, trapping retail entries on the wrong side. CISD follows.','rgba(245,158,11,0.5)'],['Distribution','NY session. True delivery. Price moves to the opposing DOL from the manipulation sweep. This is where you trade.','rgba(34,197,94,0.5)']].map(([ph,desc,c])=>(
                   <div key={ph} className="rounded-xl p-4" style={{background:c.replace('0.5','0.06'),border:`0.5px solid ${c.replace('0.5','0.2')}`}}>
                     <div className="font-medium mb-2 text-sm" style={{color:c.replace('0.5','0.8')}}>{ph}</div>
-                    <div className="text-white/35 text-xs leading-relaxed">{desc}</div>
+                    <div className="text-white/45 text-xs leading-relaxed">{desc}</div>
                   </div>
                 ))}
               </div>
             </div>
-            <div className="bg-[#0a0c10] border border-white/5 rounded-xl p-4">
-              <div className="text-white/30 text-xs uppercase tracking-wider mb-3">ICT Key Rules · From Episodes 1–7</div>
+            <div className="bg-[#161b22] border border-white/10 rounded-xl p-4">
+              <div className="text-white/40 text-xs uppercase tracking-wider mb-3">ICT Key Rules · From Episodes 1–7</div>
               <div className="grid grid-cols-2 gap-3">
                 {[
                   ['CISD Rule','A FULL candle body close through a prior swing is required. A wick is NOT a real MSS. This is the single most common error traders make.'],
@@ -684,9 +684,9 @@ export default function App() {
                   ['Multi-Timeframe','Daily/Weekly for bias. 4H for structure. 1H for CISD confirmation. 15m/5m for entry PD array. Never skip a timeframe.'],
                   ['Confluence','All 5 must align: HTF bias + liquidity sweep done + real CISD + PD array in correct zone + clear DOL. Missing any = no trade.'],
                 ].map(([t,d])=>(
-                  <div key={t} className="border border-white/5 rounded-xl p-3">
-                    <div className="text-white/60 text-xs font-medium mb-1.5">{t}</div>
-                    <div className="text-white/30 text-xs leading-relaxed">{d}</div>
+                  <div key={t} className="border border-white/10 rounded-xl p-3">
+                    <div className="text-white/70 text-xs font-medium mb-1.5">{t}</div>
+                    <div className="text-white/40 text-xs leading-relaxed">{d}</div>
                   </div>
                 ))}
               </div>
@@ -699,8 +699,8 @@ export default function App() {
             <div className="bg-yellow-500/5 border border-yellow-500/15 rounded-xl px-4 py-2.5 text-xs text-yellow-400/70">
               Use the Crypto tab for 10-year deep backtest on BTC/ETH using real FMP historical data.
             </div>
-            <div className="bg-[#0a0c10] border border-white/5 rounded-xl p-4 text-white/20 text-xs">
-              <div className="text-white/40 text-sm font-medium mb-2">Backtest Engine</div>
+            <div className="bg-[#161b22] border border-white/10 rounded-xl p-4 text-white/30 text-xs">
+              <div className="text-white/50 text-sm font-medium mb-2">Backtest Engine</div>
               <div>Go to Markets → Crypto → scroll down to find the 10-Year ICT Pattern Backtest. Select BTC/ETH/SOL and run. It pulls real daily OHLCV from 2016 and tests FVG + OB pattern detection across 10 years of actual price data.</div>
             </div>
           </div>
@@ -711,9 +711,9 @@ export default function App() {
 
         {platTab === 'Scan' && (
           <div className="flex flex-col items-center justify-center h-full gap-4">
-            <div className="text-white/30 text-sm">Auto-Scan · Live Market</div>
-            <div className="text-white/15 text-xs">Click the Scan button in the nav or use it from any market tab</div>
-            <button onClick={()=>setShowScan(true)} className="text-xs px-6 py-2.5 bg-white/5 hover:bg-white/8 border border-white/10 text-white/60 rounded-xl transition-colors">Open Scanner</button>
+            <div className="text-white/40 text-sm">Auto-Scan · Live Market</div>
+            <div className="text-white/25 text-xs">Click the Scan button in the nav or use it from any market tab</div>
+            <button onClick={()=>setShowScan(true)} className="text-xs px-6 py-2.5 bg-white/12 hover:bg-white/12 border border-white/10 text-white/70 rounded-xl transition-colors">Open Scanner</button>
           </div>
         )}
       </main>

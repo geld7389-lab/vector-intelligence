@@ -4,159 +4,134 @@ export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
 const sb = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
+const FMP_KEY = process.env.FMP_API_KEY ?? '';
 const FMP = 'https://financialmodelingprep.com/api/v3';
 
-interface DayData { date: string; open: number; high: number; low: number; close: number; volume: number; }
+interface Bar { date: string; open: number; high: number; low: number; close: number; volume: number; }
 
-async function getHistory(symbol: string, isCrypto: boolean): Promise<DayData[]> {
-  const key = process.env.FMP_API_KEY ?? '';
-  const endpoint = isCrypto
-    ? `${FMP}/digital_currency_historical_price/${symbol}?from=2016-01-01&apikey=${key}`
-    : `${FMP}/historical-price-full/${symbol}?from=2016-01-01&apikey=${key}`;
-  const r = await fetch(endpoint, { cache: 'no-store' });
-  const data = await r.json();
-  const hist = isCrypto ? (Array.isArray(data) ? data : []) : (data?.historical ?? []);
-  return hist.map((d: {date?: string; open?: number; high?: number; low?: number; close?: number; volume?: number; adjClose?: number}) => ({
-    date: d.date ?? '',
-    open: d.open ?? 0,
-    high: d.high ?? 0,
-    low: d.low ?? 0,
-    close: d.close ?? d.adjClose ?? 0,
-    volume: d.volume ?? 0,
-  })).filter((d: DayData) => d.date && d.close > 0).reverse(); // oldest first
+async function getHistory(symbol: string): Promise<Bar[]> {
+  try {
+    const r = await fetch(`${FMP}/digital_currency_historical_price/${symbol}?from=2016-01-01&apikey=${FMP_KEY}`, { cache: 'no-store' });
+    const data = await r.json();
+    if (!Array.isArray(data)) return [];
+    return data.map((d: {date?:string;open?:number;high?:number;low?:number;price?:number;volume?:number}) => ({
+      date: d.date ?? '',
+      open: d.open ?? d.price ?? 0,
+      high: d.high ?? d.price ?? 0,
+      low: d.low ?? d.price ?? 0,
+      close: d.price ?? 0,
+      volume: d.volume ?? 0,
+    })).filter(d => d.date && d.close > 0).reverse();
+  } catch { return []; }
 }
 
-function detectICTPatterns(data: DayData[], lookback = 5): {idx: number; type: string; direction: string; entryPrice: number; slPrice: number; tpPrice: number}[] {
-  const signals = [];
-  for (let i = lookback + 2; i < data.length - 3; i++) {
-    const window = data.slice(i - lookback, i);
-    const swingH = Math.max(...window.map(d => d.high));
-    const swingL = Math.min(...window.map(d => d.low));
-    const midpoint = (swingH + swingL) / 2;
-    const range = swingH - swingL;
-    const curr = data[i];
-    const prev1 = data[i - 1];
-    const prev2 = data[i - 2];
+function detectPatterns(bars: Bar[]) {
+  const signals: {idx:number;type:string;dir:string;entry:number;sl:number;tp:number}[] = [];
+  const lb = 5;
+  for (let i = lb + 2; i < bars.length - 5; i++) {
+    const w = bars.slice(i-lb, i);
+    const swH = Math.max(...w.map(b=>b.high));
+    const swL = Math.min(...w.map(b=>b.low));
+    const mid = (swH + swL) / 2;
+    const rng = swH - swL;
+    if (rng < 1) continue;
+    const c = bars[i], p1 = bars[i-1], p2 = bars[i-2];
 
-    // Bullish FVG: gap between prev2 high and curr low
-    if (prev2.high < curr.low && prev1.close > prev1.open && curr.close < midpoint) {
-      const fvgMid = (prev2.high + curr.low) / 2;
-      signals.push({
-        idx: i, type: 'Bullish FVG', direction: 'bull',
-        entryPrice: fvgMid,
-        slPrice: fvgMid - range * 0.02,
-        tpPrice: swingH + range * 0.03,
-      });
+    // Bullish FVG: gap between p2.high and c.low, bullish middle candle
+    if (p2.high < c.low && p1.close > p1.open && c.close < mid) {
+      const entry = (p2.high + c.low) / 2;
+      const sl = entry - rng * 0.025;
+      const tp = swH + rng * 0.05;
+      if (Math.abs(tp-entry) / Math.abs(entry-sl) >= 1.5)
+        signals.push({ idx: i, type: 'Bullish FVG', dir: 'bull', entry, sl, tp });
     }
     // Bearish FVG
-    if (prev2.low > curr.high && prev1.close < prev1.open && curr.close > midpoint) {
-      const fvgMid = (prev2.low + curr.high) / 2;
-      signals.push({
-        idx: i, type: 'Bearish FVG', direction: 'bear',
-        entryPrice: fvgMid,
-        slPrice: fvgMid + range * 0.02,
-        tpPrice: swingL - range * 0.03,
-      });
+    if (p2.low > c.high && p1.close < p1.open && c.close > mid) {
+      const entry = (p2.low + c.high) / 2;
+      const sl = entry + rng * 0.025;
+      const tp = swL - rng * 0.05;
+      if (Math.abs(tp-entry) / Math.abs(sl-entry) >= 1.5)
+        signals.push({ idx: i, type: 'Bearish FVG', dir: 'bear', entry, sl, tp });
     }
     // Bullish OB: last bearish candle before bullish impulse in discount
-    if (prev1.close < prev1.open && curr.close > prev1.high && curr.close < midpoint) {
-      signals.push({
-        idx: i, type: 'Bullish OB', direction: 'bull',
-        entryPrice: (prev1.open + prev1.close) / 2,
-        slPrice: prev1.low - range * 0.01,
-        tpPrice: swingH,
-      });
+    if (p1.close < p1.open && c.close > p1.high && c.close < mid) {
+      const entry = (p1.open + p1.close) / 2;
+      const sl = p1.low - rng * 0.015;
+      const tp = swH;
+      if (Math.abs(tp-entry) / Math.abs(entry-sl) >= 1.5)
+        signals.push({ idx: i, type: 'Bullish OB', dir: 'bull', entry, sl, tp });
     }
     // Bearish OB
-    if (prev1.close > prev1.open && curr.close < prev1.low && curr.close > midpoint) {
-      signals.push({
-        idx: i, type: 'Bearish OB', direction: 'bear',
-        entryPrice: (prev1.open + prev1.close) / 2,
-        slPrice: prev1.high + range * 0.01,
-        tpPrice: swingL,
-      });
+    if (p1.close > p1.open && c.close < p1.low && c.close > mid) {
+      const entry = (p1.open + p1.close) / 2;
+      const sl = p1.high + rng * 0.015;
+      const tp = swL;
+      if (Math.abs(tp-entry) / Math.abs(sl-entry) >= 1.5)
+        signals.push({ idx: i, type: 'Bearish OB', dir: 'bear', entry, sl, tp });
     }
   }
   return signals;
 }
 
-function simulateTrade(data: DayData[], signal: {idx: number; direction: string; entryPrice: number; slPrice: number; tpPrice: number}, maxBars = 20): 'win' | 'loss' | 'timeout' {
-  for (let i = signal.idx + 1; i < Math.min(signal.idx + maxBars, data.length); i++) {
-    const bar = data[i];
-    if (signal.direction === 'bull') {
-      if (bar.low <= signal.slPrice) return 'loss';
-      if (bar.high >= signal.tpPrice) return 'win';
-    } else {
-      if (bar.high >= signal.slPrice) return 'loss';
-      if (bar.low <= signal.tpPrice) return 'win';
-    }
+function simulate(bars: Bar[], sig: {idx:number;dir:string;entry:number;sl:number;tp:number}, maxBars=15): 'win'|'loss'|null {
+  for (let i = sig.idx+1; i < Math.min(sig.idx+maxBars, bars.length); i++) {
+    const b = bars[i];
+    if (sig.dir==='bull') { if(b.low<=sig.sl)return 'loss'; if(b.high>=sig.tp)return 'win'; }
+    else { if(b.high>=sig.sl)return 'loss'; if(b.low<=sig.tp)return 'win'; }
   }
-  return 'timeout';
+  return null;
 }
 
 export async function POST(req: NextRequest) {
   try {
-    const { symbol, marketSection = 'crypto', setupTypes = ['Bullish FVG', 'Bearish FVG', 'Bullish OB', 'Bearish OB'] } = await req.json();
-    if (!symbol) return NextResponse.json({ error: 'Symbol required' }, { status: 400 });
+    const { symbol='BTCUSD', marketSection='crypto' } = await req.json();
+    const bars = await getHistory(symbol);
+    if (bars.length < 50) return NextResponse.json({ error: `Only ${bars.length} bars — FMP may need a higher plan for this symbol` }, { status: 400 });
 
-    const isCrypto = marketSection === 'crypto' || symbol.endsWith('USD');
-    const data = await getHistory(symbol, isCrypto);
-    if (data.length < 100) return NextResponse.json({ error: `Only ${data.length} bars available` }, { status: 400 });
+    const signals = detectPatterns(bars);
+    const trades: {date:string;type:string;result:string;rr:number;year:string}[] = [];
+    const yStats: Record<string,{wins:number;losses:number;total:number}> = {};
 
-    const signals = detectICTPatterns(data);
-    const filtered = signals.filter(s => setupTypes.includes(s.type));
-
-    const trades: {date: string; type: string; direction: string; result: string; rr: number; year: string}[] = [];
-    const yearlyStats: Record<string, {wins: number; losses: number; total: number}> = {};
-
-    for (const sig of filtered) {
-      const result = simulateTrade(data, sig);
-      if (result === 'timeout') continue;
-      const date = data[sig.idx].date;
-      const year = date.slice(0, 4);
-      const rr = result === 'win'
-        ? Math.abs(sig.tpPrice - sig.entryPrice) / Math.abs(sig.entryPrice - sig.slPrice)
-        : 1;
-      trades.push({ date, type: sig.type, direction: sig.direction, result, rr: parseFloat(rr.toFixed(2)), year });
-      if (!yearlyStats[year]) yearlyStats[year] = { wins: 0, losses: 0, total: 0 };
-      yearlyStats[year].total++;
-      if (result === 'win') yearlyStats[year].wins++; else yearlyStats[year].losses++;
+    for (const sig of signals) {
+      const result = simulate(bars, sig);
+      if (!result) continue;
+      const date = bars[sig.idx].date;
+      const year = date.slice(0,4);
+      const rr = result==='win' ? Math.abs(sig.tp-sig.entry)/Math.abs(sig.entry-sig.sl) : 1;
+      trades.push({ date, type: sig.type, result, rr: +rr.toFixed(2), year });
+      if (!yStats[year]) yStats[year] = {wins:0,losses:0,total:0};
+      yStats[year].total++;
+      if (result==='win') yStats[year].wins++; else yStats[year].losses++;
     }
 
-    const wins = trades.filter(t => t.result === 'win').length;
-    const losses = trades.filter(t => t.result === 'loss').length;
-    const winRate = trades.length > 0 ? parseFloat(((wins / trades.length) * 100).toFixed(1)) : 0;
-    const avgRR = trades.length > 0 ? parseFloat((trades.reduce((a, t) => a + t.rr, 0) / trades.length).toFixed(2)) : 0;
-    const grossW = trades.filter(t => t.result === 'win').reduce((a, t) => a + t.rr, 0);
-    const grossL = trades.filter(t => t.result === 'loss').length;
-    const pf = grossL > 0 ? parseFloat((grossW / grossL).toFixed(2)) : grossW;
+    if (!trades.length) return NextResponse.json({ error: 'No completed trades detected in data' }, { status: 400 });
 
-    // Best/worst year
-    const yearWR = Object.entries(yearlyStats).map(([y, s]) => ({ year: y, wr: s.total > 0 ? s.wins / s.total : 0 }));
-    const bestYear = yearWR.sort((a, b) => b.wr - a.wr)[0]?.year ?? '—';
-    const worstYear = yearWR.sort((a, b) => a.wr - b.wr)[0]?.year ?? '—';
+    const wins = trades.filter(t=>t.result==='win').length;
+    const losses = trades.length - wins;
+    const wr = +(wins/trades.length*100).toFixed(1);
+    const avgRR = +(trades.reduce((a,t)=>a+t.rr,0)/trades.length).toFixed(2);
+    const gW = trades.filter(t=>t.result==='win').reduce((a,t)=>a+t.rr,0);
+    const pf = losses>0 ? +(gW/losses).toFixed(2) : gW;
+    const yrList = Object.entries(yStats).map(([y,s])=>({year:y,wr:s.total>0?s.wins/s.total:0}));
+    const bestYear = [...yrList].sort((a,b)=>b.wr-a.wr)[0]?.year??'—';
+    const worstYear = [...yrList].sort((a,b)=>a.wr-b.wr)[0]?.year??'—';
 
     const run = {
-      symbol, timeframe: 'D', market_section: marketSection,
-      setup_type: setupTypes.join(', '),
-      from_date: data[0]?.date ?? '2016-01-01',
-      to_date: data[data.length - 1]?.date ?? '2026-01-01',
-      total_signals: filtered.length,
-      wins, losses, win_rate: winRate, avg_rr: avgRR,
-      total_pnl: parseFloat((wins * avgRR - losses).toFixed(2)),
-      max_drawdown: 0, profit_factor: pf,
-      best_year: bestYear, worst_year: worstYear,
-      yearly_breakdown: yearlyStats,
+      symbol, timeframe:'D', market_section:marketSection, setup_type:'FVG+OB',
+      from_date:bars[0].date, to_date:bars[bars.length-1].date,
+      total_signals:signals.length, wins, losses, win_rate:wr, avg_rr:avgRR,
+      total_pnl:+(wins*avgRR-losses).toFixed(2),
+      max_drawdown:0, profit_factor:pf, best_year:bestYear, worst_year:worstYear,
+      yearly_breakdown:yStats,
     };
-
     await sb.from('backtest_results').insert(run);
-    return NextResponse.json({ run, trades: trades.slice(-50), totalBars: data.length, dateRange: `${data[0]?.date} to ${data[data.length-1]?.date}` });
+    return NextResponse.json({ run, totalBars:bars.length, dateRange:`${bars[0].date} → ${bars[bars.length-1].date}` });
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : String(err) }, { status: 500 });
   }
 }
 
 export async function GET() {
-  const { data } = await sb.from('backtest_results').select('*').order('created_at', { ascending: false }).limit(20);
-  return NextResponse.json({ results: data ?? [] });
+  const {data} = await sb.from('backtest_results').select('*').order('created_at',{ascending:false}).limit(20);
+  return NextResponse.json({ results: data??[] });
 }
