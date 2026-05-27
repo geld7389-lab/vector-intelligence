@@ -5,7 +5,7 @@ const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env
 
 async function fetchCandles(symbol: string): Promise<{h:number,l:number,c:number,t:number}[]> {
   try {
-    const base = 'https://vector-intelligence-seven.vercel.app';
+    const base = 'https://vector-intelligence-alpha.vercel.app';
     const r = await fetch(`${base}/api/candles?symbol=${symbol}&tf=15m`, { cache: 'no-store' });
     const d = await r.json();
     return d.candles ?? [];

@@ -11,7 +11,7 @@ interface Candle { t: number; o: number; h: number; l: number; c: number; v?: nu
 
 async function fetchCandles(symbol: string, tf: string): Promise<Candle[]> {
   try {
-    const base = process.env.NEXT_PUBLIC_APP_URL || 'https://vector-intelligence-seven.vercel.app';
+    const base = process.env.NEXT_PUBLIC_APP_URL || 'https://vector-intelligence-alpha.vercel.app';
     const res = await fetch(`${base}/api/candles?symbol=${symbol}&tf=${tf}`, { cache: 'no-store' });
     const data = await res.json();
     return data.candles ?? [];
