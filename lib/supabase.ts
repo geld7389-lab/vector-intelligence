@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? 'https://xavkbjbgmuasfkliptsh.supabase.co'
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhhdmtiamdtdWFzZmtsaXB0c2giLCJyb2xlIjoiYW5vbiIsImlhdCI6MTc0NjgxNTU5MiwiZXhwIjoyMDYyMzkxNTkyfQ.LMkYBBaSHNFUOm3ETy1N1PL60vVCj7kpORCBJ6mGf1M'
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey)
 
@@ -13,73 +13,26 @@ export type Database = {
           id: string
           symbol: string
           timeframe: string
+          direction: string
           setup_type: string
-          direction: 'bull' | 'bear' | 'inversion'
-          confluence_score: number
           entry_low: number
           entry_high: number
           stop_loss: number
           target: number
           rr_ratio: number
+          confluence_score: number
           status: 'active' | 'watching' | 'triggered' | 'invalidated' | 'won' | 'lost' | 'expired'
-          dol_target: string
+          dol_target: string | null
           ai_analysis: string | null
           created_at: string
-          updated_at: string
-        }
-        Insert: Omit<Database['public']['Tables']['setups']['Row'], 'id' | 'created_at' | 'updated_at'>
-      }
-      pd_arrays: {
-        Row: {
-          id: string
-          symbol: string
-          timeframe: string
-          type: 'ob' | 'fvg' | 'bisi' | 'sibi' | 'iob' | 'ifvg' | 'ibrk' | 'brk'
-          direction: 'bull' | 'bear'
-          price_high: number
-          price_low: number
-          is_mitigated: boolean
-          is_inverted: boolean
-          created_at: string
-        }
-      }
-      trades: {
-        Row: {
-          id: string
-          setup_id: string | null
-          symbol: string
-          direction: 'long' | 'short'
-          entry_price: number
-          stop_loss: number
-          take_profit: number
-          result: 'win' | 'loss' | 'breakeven' | 'open'
-          rr_achieved: number | null
-          notes: string | null
-          opened_at: string
-          closed_at: string | null
-        }
-      }
-      knowledge_base: {
-        Row: {
-          id: string
-          category: string
-          title: string
-          content: string
-          source_episode: string
-          tags: string[]
-          created_at: string
-        }
-      }
-      scanner_alerts: {
-        Row: {
-          id: string
-          symbol: string
-          timeframe: string
-          alert_type: string
-          message: string
-          severity: 'info' | 'warning' | 'critical'
-          is_read: boolean
-          created_at: string
+          htf_bias: string | null
+          cisd_confirmed: boolean
+          volume_context: string | null
+          killzone_valid: string | null
+          correlated_align: boolean
+          expires_at: string | null
+          invalidated_reason: string | null
+          market_section: string | null
         }
       }
     }
