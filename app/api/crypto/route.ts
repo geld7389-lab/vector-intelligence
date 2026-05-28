@@ -1,55 +1,68 @@
 import { NextRequest, NextResponse } from 'next/server';
 export const dynamic = 'force-dynamic';
 
-const FMP_KEY = process.env.FMP_API_KEY ?? '';
-const FMP = 'https://financialmodelingprep.com/api/v3';
-
+// Yahoo Finance — no API key needed
 const CRYPTO = [
-  { fmp: 'BTCUSD', name: 'Bitcoin', symbol: 'BTC' },
-  { fmp: 'ETHUSD', name: 'Ethereum', symbol: 'ETH' },
-  { fmp: 'SOLUSD', name: 'Solana', symbol: 'SOL' },
-  { fmp: 'BNBUSD', name: 'BNB', symbol: 'BNB' },
-  { fmp: 'XRPUSD', name: 'XRP', symbol: 'XRP' },
-  { fmp: 'ADAUSD', name: 'Cardano', symbol: 'ADA' },
-  { fmp: 'AVAXUSD', name: 'Avalanche', symbol: 'AVAX' },
-  { fmp: 'DOGEUSD', name: 'Dogecoin', symbol: 'DOGE' },
+  { yahoo: 'BTC-USD', name: 'Bitcoin',   symbol: 'BTC' },
+  { yahoo: 'ETH-USD', name: 'Ethereum',  symbol: 'ETH' },
+  { yahoo: 'SOL-USD', name: 'Solana',    symbol: 'SOL' },
+  { yahoo: 'BNB-USD', name: 'BNB',       symbol: 'BNB' },
+  { yahoo: 'XRP-USD', name: 'XRP',       symbol: 'XRP' },
+  { yahoo: 'ADA-USD', name: 'Cardano',   symbol: 'ADA' },
+  { yahoo: 'AVAX-USD',name: 'Avalanche', symbol: 'AVAX' },
+  { yahoo: 'DOGE-USD',name: 'Dogecoin',  symbol: 'DOGE' },
 ];
 
-async function getQuote(fmpSym: string) {
+async function yahooPrice(symbol: string) {
   try {
-    const r = await fetch(`${FMP}/cryptocurrency/${fmpSym}?apikey=${FMP_KEY}`, { cache: 'no-store' });
+    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?interval=1d&range=2d`;
+    const r = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' }, cache: 'no-store' });
     const d = await r.json();
-    return Array.isArray(d) ? d[0] : null;
-  } catch { return null; }
+    const meta = d?.chart?.result?.[0]?.meta;
+    const prev = d?.chart?.result?.[0]?.indicators?.quote?.[0]?.close?.[0];
+    const price = meta?.regularMarketPrice ?? null;
+    const change = price && prev ? ((price - prev) / prev) * 100 : null;
+    return {
+      price,
+      change24h: change ? parseFloat(change.toFixed(2)) : null,
+      high24h: meta?.regularMarketDayHigh ?? null,
+      low24h: meta?.regularMarketDayLow ?? null,
+      volume24h: meta?.regularMarketVolume ?? null,
+    };
+  } catch { return { price: null, change24h: null, high24h: null, low24h: null, volume24h: null }; }
+}
+
+// 10-year historical via Yahoo
+async function yahooHistory(symbol: string) {
+  try {
+    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?interval=1d&range=10y`;
+    const r = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' }, cache: 'no-store' });
+    const d = await r.json();
+    const result = d?.chart?.result?.[0];
+    if (!result) return [];
+    const times = result.timestamp ?? [];
+    const ohlcv = result.indicators?.quote?.[0] ?? {};
+    return times.map((t: number, i: number) => ({
+      date: new Date(t * 1000).toISOString().slice(0, 10),
+      open: ohlcv.open?.[i] ?? 0,
+      high: ohlcv.high?.[i] ?? 0,
+      low: ohlcv.low?.[i] ?? 0,
+      close: ohlcv.close?.[i] ?? 0,
+      volume: ohlcv.volume?.[i] ?? 0,
+    })).filter((b: {close: number}) => b.close > 0);
+  } catch { return []; }
 }
 
 export async function GET(req: NextRequest) {
   const type = req.nextUrl.searchParams.get('type') ?? 'prices';
-  const symbol = req.nextUrl.searchParams.get('symbol') ?? 'BTCUSD';
+  const symbol = req.nextUrl.searchParams.get('symbol') ?? 'BTC-USD';
 
   if (type === 'history') {
-    try {
-      const r = await fetch(`${FMP}/digital_currency_historical_price/${symbol}?from=2016-01-01&apikey=${FMP_KEY}`, { cache: 'no-store' });
-      const data = await r.json();
-      return NextResponse.json({ symbol, history: Array.isArray(data) ? data : [] });
-    } catch (e) {
-      return NextResponse.json({ symbol, history: [], error: String(e) });
-    }
+    const history = await yahooHistory(symbol);
+    return NextResponse.json({ symbol, history });
   }
 
-  // Live prices
-  const quotes = await Promise.all(CRYPTO.map(c => getQuote(c.fmp)));
-  const prices = CRYPTO.map((c, i) => {
-    const q = quotes[i];
-    return {
-      symbol: c.symbol, name: c.name, fmp: c.fmp,
-      price: q?.price ?? null,
-      change24h: q?.changesPercentage ?? null,
-      high24h: q?.dayHigh ?? null,
-      low24h: q?.dayLow ?? null,
-      volume24h: q?.volume ?? null,
-      marketCap: q?.marketCap ?? null,
-    };
-  });
+  const quotes = await Promise.all(CRYPTO.map(c => yahooPrice(c.yahoo)));
+  const prices = CRYPTO.map((c, i) => ({ ...c, ...quotes[i] }));
   return NextResponse.json({ prices, ts: Date.now() });
 }
