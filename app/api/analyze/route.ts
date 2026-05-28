@@ -62,9 +62,24 @@ Using the ICT methodology from the episodes above, answer these 5 questions dire
 
 5. VERDICT: WAIT / WATCH / READY — one sentence with the exact condition needed to act.`;
 
+    const apiKey = process.env.ANTHROPIC_API_KEY ?? '';
+    if (!apiKey) {
+      // Generate analysis from knowledge base without AI when no key available
+      const verdict = isExpired ? 'INVALIDATED' : !setup.cisd_confirmed ? 'WAIT — CISD not yet confirmed. Await full body close through prior swing.' : price && price >= setup.entry_low && price <= setup.entry_high ? 'READY — Price is inside entry zone. Confirm CISD and enter on PD array.' : 'WATCH — Price not yet in entry zone. Wait for price to return to ' + setup.entry_low + '-' + setup.entry_high + '.';
+      return NextResponse.json({ analysis: `Analysis (AI key not configured):
+
+1. DOL: ${setup.dol_target} — target at ${setup.target}
+2. Location: ${priceLocation}
+3. CISD: ${setup.cisd_confirmed ? 'Confirmed' : 'PENDING — full body close needed'}
+4. Risk: HTF bias conflict (${setup.htf_bias} vs ${setup.direction}) and volume context (${setup.volume_context})
+5. VERDICT: ${verdict}
+
+Set ANTHROPIC_API_KEY in Vercel environment variables for full AI analysis.` });
+    }
+
     const res = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
       body: JSON.stringify({ model: 'claude-sonnet-4-20250514', max_tokens: 500, messages: [{ role: 'user', content: prompt }] })
     });
 

@@ -575,7 +575,16 @@ function KnowledgeTab(){
   const [form,setForm]=useState({title:'',content:'',category:'concept',tags:''});
   const [saving,setSaving]=useState(false);
   const inp="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-2 py-1.5 text-xs text-zinc-200 focus:outline-none";
-  useEffect(()=>{sb.from('knowledge_base').select('*').order('source_episode').limit(100).then(({data})=>{if(data)setArticles(data as typeof articles);});},[]);
+  useEffect(()=>{
+    const client = createClient(
+      'https://xavkbjbgmuasfkliptsh.supabase.co',
+      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhhdmtiamdtdWFzZmtsaXB0c2giLCJyb2xlIjoiYW5vbiIsImlhdCI6MTc0NjgxNTU5MiwiZXhwIjoyMDYyMzkxNTkyfQ.LMkYBBaSHNFUOm3ETy1N1PL60vVCj7kpORCBJ6mGf1M'
+    );
+    client.from('knowledge_base').select('*').order('source_episode').limit(100).then(({data,error})=>{
+      if(error) console.error('KB error:', error);
+      if(data) setArticles(data as typeof articles);
+    });
+  },[]);
   const saveNote=async()=>{if(!form.title||!form.content)return;setSaving(true);const {data}=await sb.from('knowledge_base').insert({...form,tags:form.tags.split(',').map(t=>t.trim()).filter(Boolean),is_user_note:true,source_episode:'My Notes'}).select();if(data){setArticles(p=>[data[0] as typeof articles[0],...p]);setAdding(false);setForm({title:'',content:'',category:'concept',tags:''});}setSaving(false);};
   const filtered=articles.filter(a=>!search||a.title?.toLowerCase().includes(search.toLowerCase())||a.content?.toLowerCase().includes(search.toLowerCase()));
   return(
