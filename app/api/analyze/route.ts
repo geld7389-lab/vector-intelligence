@@ -62,7 +62,7 @@ Using the ICT methodology from the episodes above, answer these 5 questions dire
 
 5. VERDICT: WAIT / WATCH / READY — one sentence with the exact condition needed to act.`;
 
-    const apiKey = process.env.ANTHROPIC_API_KEY ?? '';
+    const apiKey = process.env.GROQ_API_KEY ?? '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';
     if (!apiKey) {
       // Generate analysis from knowledge base without AI when no key available
       const verdict = isExpired ? 'INVALIDATED' : !setup.cisd_confirmed ? 'WAIT — CISD not yet confirmed. Await full body close through prior swing.' : price && price >= setup.entry_low && price <= setup.entry_high ? 'READY — Price is inside entry zone. Confirm CISD and enter on PD array.' : 'WATCH — Price not yet in entry zone. Wait for price to return to ' + setup.entry_low + '-' + setup.entry_high + '.';
@@ -77,14 +77,23 @@ Using the ICT methodology from the episodes above, answer these 5 questions dire
 Set ANTHROPIC_API_KEY in Vercel environment variables for full AI analysis.` });
     }
 
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
+    const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
-      body: JSON.stringify({ model: 'claude-sonnet-4-20250514', max_tokens: 500, messages: [{ role: 'user', content: prompt }] })
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+      body: JSON.stringify({
+        model: 'llama-3.1-70b-versatile',
+        max_tokens: 600,
+        temperature: 0.3,
+        messages: [
+          { role: 'system', content: 'You are an expert ICT/SMC trading analyst. Be direct, specific, and concise. Reference the ICT methodology exactly as described in the context provided.' },
+          { role: 'user', content: prompt }
+        ]
+      })
     });
 
     const data = await res.json();
-    return NextResponse.json({ analysis: data.content?.[0]?.text ?? 'No response' });
+    const text = data.choices?.[0]?.message?.content ?? data.error?.message ?? 'No response';
+    return NextResponse.json({ analysis: text });
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : String(err) }, { status: 500 });
   }
