@@ -6,10 +6,21 @@ const supabase = createClient((process.env.NEXT_PUBLIC_SUPABASE_URL ?? 'https://
 interface Candle { t: number; o: number; h: number; l: number; c: number; v?: number; }
 
 async function fetchCandles(symbol: string, tf: string): Promise<Candle[]> {
-  const base = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : (process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000');
-  const r = await fetch(`${base}/api/candles?symbol=${symbol}&tf=${tf}`, { cache: 'no-store' });
-  const d = await r.json();
-  return d.candles ?? [];
+  try {
+    const yahooMap: Record<string,string> = { NQ:'NQ=F', ES:'ES=F', GC:'GC=F', CL:'CL=F', BTC:'BTC-USD', ETH:'ETH-USD', SOL:'SOL-USD', SPY:'SPY', QQQ:'QQQ' };
+    const ySym = yahooMap[symbol] ?? `${symbol}=F`;
+    const interval = tf==='15m'?'15m':tf==='1h'?'60m':'1d';
+    const range = tf==='15m'?'5d':tf==='1h'?'1mo':'1y';
+    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ySym)}?interval=${interval}&range=${range}`;
+    const res = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' }, cache: 'no-store' });
+    if (!res.ok) return [];
+    const json = await res.json();
+    const result = json?.chart?.result?.[0];
+    if (!result) return [];
+    const ts: number[] = result.timestamp ?? [];
+    const q = result.indicators?.quote?.[0] ?? {};
+    return ts.map((t,i) => ({ t:t*1000, o:q.open?.[i], h:q.high?.[i], l:q.low?.[i], c:q.close?.[i], v:q.volume?.[i] })).filter(c=>c.o!=null&&c.h!=null&&c.l!=null&&c.c!=null);
+  } catch { return []; }
 }
 
 function runBacktest(candles: Candle[], entryPct: number, slPct: number, tpPct: number, direction: 'bull'|'bear') {

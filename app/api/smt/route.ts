@@ -5,10 +5,19 @@ const supabase = createClient((process.env.NEXT_PUBLIC_SUPABASE_URL ?? 'https://
 
 async function fetchCandles(symbol: string): Promise<{h:number,l:number,c:number,t:number}[]> {
   try {
-    const base = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : (process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000');
-    const r = await fetch(`${base}/api/candles?symbol=${symbol}&tf=15m`, { cache: 'no-store' });
-    const d = await r.json();
-    return d.candles ?? [];
+    try {
+      const yahooMap: Record<string,string> = { NQ:'NQ=F', ES:'ES=F', GC:'GC=F' };
+      const ySym = yahooMap[symbol] ?? `${symbol}=F`;
+      const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ySym)}?interval=15m&range=5d`;
+      const res = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' }, cache: 'no-store' });
+      if (!res.ok) return [];
+      const json = await res.json();
+      const result = json?.chart?.result?.[0];
+      if (!result) return [];
+      const ts: number[] = result.timestamp ?? [];
+      const q = result.indicators?.quote?.[0] ?? {};
+      return ts.map((t,i)=>({ t:t*1000, o:q.open?.[i], h:q.high?.[i], l:q.low?.[i], c:q.close?.[i], v:q.volume?.[i] })).filter((c:any)=>c.o!=null&&c.l!=null&&c.c!=null);
+    } catch { return []; }
   } catch { return []; }
 }
 
