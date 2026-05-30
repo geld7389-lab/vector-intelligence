@@ -1,8 +1,10 @@
 {
   "crons": [
-    {
-      "path": "/api/monitor",
-      "schedule": "*/2 * * * *"
-    }
-  ]
+    { "path": "/api/monitor", "schedule": "*/2 * * * *" }
+  ],
+  "env": {
+    "NEXT_PUBLIC_SUPABASE_URL": "https://xavkbjbgmuasfkliptsh.supabase.co",
+    "NEXT_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhhdmtiamdtdWFzZmtsaXB0c2giLCJyb2xlIjoiYW5vbiIsImlhdCI6MTc0NjgxNTU5MiwiZXhwIjoyMDYyMzkxNTkyfQ.LMkYBBaSHNFUOm3ETy1N1PL60vVCj7kpORCBJ6mGf1M",
+    "GROQ_API_KEY": "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"
+  }
 }
