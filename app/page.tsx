@@ -639,7 +639,7 @@ export default function App(){
 
   useEffect(()=>{loadSetups();},[loadSetups]);
 
-  const loadPrices=useCallback(async()=>{try{const r=await fetch('/api/prices',{cache:'no-store'});const d=await r.json();if(d.prices){setPrev(prices);setPrices(d.prices);}}catch{}},[prices]);
+  const loadPrices=useCallback(async()=>{try{const r=await fetch('/api/prices',{cache:'no-store'});const d=await r.json();if(d.prices){setPrices(cur=>{setPrev(cur);return d.prices;});}}catch{}},[]);
   const loadKz=useCallback(async()=>{try{const r=await fetch('/api/killzone',{cache:'no-store'});const d=await r.json();setKz(d);}catch{}},[]);
   const loadNews=useCallback(async()=>{try{const r=await fetch('/api/calendar',{cache:'no-store'});const d=await r.json();setCalNews(d.events??[]);}catch{}},[]);
 
