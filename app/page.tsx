@@ -2,734 +2,832 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { createClient } from '@supabase/supabase-js';
 
-const SB_URL = process.env.NEXT_PUBLIC_SUPABASE_URL ?? 'https://xavkbjbgmuasfkliptsh.supabase.co';
-const SB_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhhdmtiamdtdWFzZmtsaXB0c2giLCJyb2xlIjoiYW5vbiIsImlhdCI6MTc0NjgxNTU5MiwiZXhwIjoyMDYyMzkxNTkyfQ.LMkYBBaSHNFUOm3ETy1N1PL60vVCj7kpORCBJ6mGf1M';
+const SB_URL = 'https://xavkbjbgmuasfkliptsh.supabase.co';
+const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhhdmtiamdtdWFzZmtsaXB0c2giLCJyb2xlIjoiYW5vbiIsImlhdCI6MTc0NjgxNTU5MiwiZXhwIjoyMDYyMzkxNTkyfQ.LMkYBBaSHNFUOm3ETy1N1PL60vVCj7kpORCBJ6mGf1M';
 const sb = createClient(SB_URL, SB_KEY);
 
-interface Setup { id:string;symbol:string;timeframe:string;direction:string;setup_type:string;entry_low:number;entry_high:number;stop_loss:number;target:number;rr_ratio:number;confluence_score:number;status:string;dol_target:string;ai_analysis:string;htf_bias:string;cisd_confirmed:boolean;volume_context:string;killzone_valid:string;correlated_align:boolean;expires_at:string;market_section:string; }
+type Tab = 'Markets'|'Trades'|'Analytics'|'Journal'|'Knowledge';
+type MkTab = 'Futures'|'Crypto'|'Forex'|'Stocks'|'Institutional';
+
+interface Setup {
+  id:string;symbol:string;timeframe:string;direction:string;setup_type:string;
+  entry_low:number;entry_high:number;stop_loss:number;target:number;rr_ratio:number;
+  confluence_score:number;status:string;dol_target:string;ai_analysis:string;
+  htf_bias:string;cisd_confirmed:boolean;volume_context:string;killzone_valid:string;
+  correlated_align:boolean;expires_at:string;market_section:string;
+}
 interface Prices { NQ:number|null;ES:number|null;GC:number|null;DXY:number|null;VIX:number|null; }
-interface KZ { nyTime:string;active:{name:string;short:string;color:string}|null;upcoming:{name:string;short:string;minsAway:number}[];probability:string;isLunch:boolean; }
-interface CalEvent { name:string;impact:string;isToday:boolean;minutesAway:number|null;isDangerZone:boolean;date:string; }
-interface CryptoPrice { symbol:string;name:string;price:number|null;change24h:number|null;high24h:number|null;low24h:number|null; }
-interface Quote { symbol:string;name:string;price:number|null;change:number|null;high:number|null;low:number|null;mktCap?:number|null; }
-interface BtRun { id:string;symbol:string;market_section:string;setup_type:string;from_date:string;to_date:string;total_signals:number;wins:number;losses:number;win_rate:number;avg_rr:number;total_pnl:number;profit_factor:number;best_year:string;worst_year:string;yearly_breakdown:Record<string,{wins:number;losses:number;total:number}>; }
-interface Candle { t:number;o:number;h:number;l:number;c:number;v?:number; }
-
-const MKTABS = ['Futures','Crypto','Forex','Stocks','Institutional'] as const;
-const TABS = ['Markets','Chart','MMXM','Analytics','Journal','Knowledge'] as const;
-type MkTab = typeof MKTABS[number];
-type Tab = typeof TABS[number];
-
-const f=(n:number|string|null|undefined,d=2)=>{const x=Number(n);return isNaN(x)||n===null||n===undefined?'—':x.toFixed(d);};
-const chgColor=(n:number|null)=>n===null?'text-zinc-400':n>0?'text-emerald-400':'text-red-400';
-const dc=(d:string)=>d==='bull'||d==='long'?'#10b981':d==='bear'||d==='short'?'#f87171':'#f59e0b';
-// fmt$ removed - inline formatting used
-
-// ── SCORE RING ─────────────────────────────────────────────────────
-function Ring({score}:{score:number}){
-  const r=12,circ=2*Math.PI*r,fill=(score/100)*circ;
-  const color=score>=70?'#10b981':score>=50?'#f59e0b':'#f87171';
-  return(<div className="relative w-8 h-8 flex items-center justify-center shrink-0"><svg width="32" height="32" className="-rotate-90"><circle cx="16" cy="16" r={r} fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="2.5"/><circle cx="16" cy="16" r={r} fill="none" strokeWidth="2.5" strokeLinecap="round" strokeDasharray={`${fill} ${circ}`} stroke={color}/></svg><span className="absolute" style={{color,fontSize:'10px',fontWeight:600}}>{score}</span></div>);
+interface Trade {
+  id:string;symbol:string;direction:string;setup_type:string;entry_price:number;
+  exit_price:number|null;stop_loss:number;target:number;pnl_dollars:number|null;
+  pnl_r:number|null;outcome:string|null;session:string|null;notes:string|null;
+  entry_time:string;setup_id:string|null;account_size:number;risk_percent:number;
 }
 
-// ── CANDLE CHART ───────────────────────────────────────────────────
-function CandleChart({sym,tf,setup}:{sym:string;tf:string;setup:Setup|null}){
-  const ref=useRef<HTMLCanvasElement>(null);
-  const [candles,setCandles]=useState<Candle[]>([]);
-  const [hov,setHov]=useState<number|null>(null);
-  const load=useCallback(async()=>{try{const r=await fetch(`/api/candles?symbol=${sym}&tf=${tf}`,{cache:'no-store'});const d=await r.json();setCandles(d.candles??[]);}catch{}},[sym,tf]);
-  useEffect(()=>{load();},[load]);
-  useEffect(()=>{const i=setInterval(load,30000);return()=>clearInterval(i);},[load]);
-  useEffect(()=>{
-    if(!candles.length||!ref.current)return;
-    const cv=ref.current,ctx=cv.getContext('2d')!,W=cv.width,H=cv.height;
-    const PL=58,PR=6,PT=16,volH=32,chartH=H-PT-volH-20;
-    ctx.clearRect(0,0,W,H);
-    const px=candles.map(c=>[c.l,c.h]).flat();
-    let mn=Math.min(...px),mx=Math.max(...px);
-    if(setup){[setup.entry_low,setup.entry_high,setup.stop_loss,setup.target].forEach(l=>{if(l<mn)mn=l;if(l>mx)mx=l;});}
-    const pad=(mx-mn)*0.06;mn-=pad;mx+=pad;
-    const pY=(v:number)=>PT+chartH-(((v-mn)/(mx-mn))*chartH);
-    const chartW=W-PL-PR,gap=chartW/candles.length,cw=Math.max(1.5,Math.min(12,gap-1));
-    const maxV=Math.max(...candles.map(c=>c.v??0));
-    ctx.strokeStyle='rgba(255,255,255,0.05)';ctx.lineWidth=0.5;
-    for(let i=0;i<=5;i++){const y=PT+(chartH/5)*i;ctx.beginPath();ctx.moveTo(PL,y);ctx.lineTo(W-PR,y);ctx.stroke();const pv=mx-((mx-mn)/5)*i;ctx.fillStyle='rgba(255,255,255,0.35)';ctx.font='9px monospace';ctx.textAlign='right';ctx.fillText(pv.toFixed(0),PL-3,y+3);}
-    if(setup){
-      const ey1=pY(setup.entry_high),ey2=pY(setup.entry_low);
-      ctx.fillStyle='rgba(16,185,129,0.07)';ctx.fillRect(PL,ey1,chartW,ey2-ey1);
-      ctx.strokeStyle='rgba(16,185,129,0.4)';ctx.lineWidth=0.8;ctx.setLineDash([3,3]);ctx.strokeRect(PL,ey1,chartW,ey2-ey1);ctx.setLineDash([]);
-      ctx.fillStyle='rgba(16,185,129,0.7)';ctx.font='9px monospace';ctx.textAlign='left';ctx.fillText(`${f(setup.entry_low)}-${f(setup.entry_high)}`,PL+3,ey1-3);
-      const sly=pY(setup.stop_loss);ctx.strokeStyle='rgba(248,113,113,0.5)';ctx.lineWidth=0.8;ctx.setLineDash([4,2]);ctx.beginPath();ctx.moveTo(PL,sly);ctx.lineTo(W-PR,sly);ctx.stroke();ctx.setLineDash([]);ctx.fillStyle='rgba(248,113,113,0.7)';ctx.textAlign='right';ctx.fillText(`SL ${f(setup.stop_loss)}`,W-PR-2,sly-3);
-      const tpy=pY(setup.target);ctx.strokeStyle='rgba(96,165,250,0.5)';ctx.lineWidth=0.8;ctx.setLineDash([4,2]);ctx.beginPath();ctx.moveTo(PL,tpy);ctx.lineTo(W-PR,tpy);ctx.stroke();ctx.setLineDash([]);ctx.fillStyle='rgba(96,165,250,0.7)';ctx.textAlign='right';ctx.fillText(`TP ${f(setup.target)}`,W-PR-2,tpy-3);
-    }
-    candles.forEach((c,i)=>{const x=PL+i*gap+gap/2,bull=c.c>=c.o,col=bull?'#10b981':'#f87171';ctx.strokeStyle=hov===i?'#fff':col;ctx.lineWidth=0.8;ctx.beginPath();ctx.moveTo(x,pY(c.h));ctx.lineTo(x,pY(c.l));ctx.stroke();const oy=pY(Math.max(c.o,c.c)),cy2=pY(Math.min(c.o,c.c)),bh=Math.max(1,cy2-oy);ctx.fillStyle=hov===i?'rgba(255,255,255,0.9)':col;ctx.fillRect(x-cw/2,oy,cw,bh);if(c.v&&maxV>0){const vh=(c.v/maxV)*volH;ctx.fillStyle=bull?'rgba(16,185,129,0.2)':'rgba(248,113,113,0.2)';ctx.fillRect(x-cw/2,PT+chartH+4+volH-vh,cw,vh);}});
-    if(hov!==null&&candles[hov]){const c=candles[hov],x=Math.min(PL+hov*gap+gap/2,W-92);ctx.fillStyle='rgba(15,18,25,0.96)';ctx.strokeStyle='rgba(255,255,255,0.12)';ctx.lineWidth=0.5;ctx.beginPath();(ctx as CanvasRenderingContext2D&{roundRect(x:number,y:number,w:number,h:number,r:number):void}).roundRect(x,PT+2,88,48,3);ctx.fill();ctx.stroke();ctx.fillStyle='rgba(255,255,255,0.45)';ctx.font='9px monospace';ctx.textAlign='left';ctx.fillText(new Date(c.t).toLocaleDateString('en-US',{month:'short',day:'numeric'}),x+4,PT+11);ctx.fillStyle='rgba(255,255,255,0.8)';ctx.fillText(`O:${c.o.toFixed(0)} H:${c.h.toFixed(0)}`,x+4,PT+23);ctx.fillText(`L:${c.l.toFixed(0)} C:${c.c.toFixed(0)}`,x+4,PT+35);}
-    const last=candles[candles.length-1];if(last){const ly=pY(last.c);ctx.strokeStyle='rgba(251,191,36,0.45)';ctx.lineWidth=0.5;ctx.setLineDash([2,3]);ctx.beginPath();ctx.moveTo(PL,ly);ctx.lineTo(W-PR,ly);ctx.stroke();ctx.setLineDash([]);ctx.fillStyle='#fbbf24';ctx.textAlign='right';ctx.font='9px monospace';ctx.fillText(last.c.toFixed(1),W-PR-2,ly-2);}
-  },[candles,hov,setup]);
-  const onMM=(e:React.MouseEvent<HTMLCanvasElement>)=>{if(!ref.current||!candles.length)return;const rect=ref.current.getBoundingClientRect(),x=e.clientX-rect.left,gap=(ref.current.width-64)/candles.length,idx=Math.floor((x-58)/gap);setHov(idx>=0&&idx<candles.length?idx:null);};
-  return <canvas ref={ref} width={900} height={400} className="w-full h-full cursor-crosshair" onMouseMove={onMM} onMouseLeave={()=>setHov(null)}/>;
-}
+const cx = (...c: (string|boolean|undefined|null)[]) => c.filter(Boolean).join(' ');
+const fmt = (n:number|null, d=1) => n==null ? '—' : n.toFixed(d);
 
-// ── PRICE CARD ────────────────────────────────────────────────────
-function PCard({name,price,change,sub}:{name:string;price:string;change:number|null;sub?:string}){
-  return(
-    <div className="bg-zinc-800/50 border border-zinc-700/50 rounded-xl p-3 hover:border-zinc-600/60 transition-colors">
-      <div className="text-zinc-400 text-xs mb-1">{name}</div>
-      <div className="text-white text-sm font-semibold">{price}</div>
-      <div className="flex items-center justify-between mt-1">
-        <span className={`text-xs ${chgColor(change)}`}>{change!==null?(change>0?'+':'')+change.toFixed(2)+'%':'—'}</span>
-        {sub&&<span className="text-zinc-600 text-xs">{sub}</span>}
-      </div>
-    </div>
-  );
-}
-
-// ── CRYPTO TAB ────────────────────────────────────────────────────
-function CryptoTab({setups,onChart,onDelete}:{setups:Setup[];onChart:(s:Setup)=>void;onDelete:(id:string)=>void}){
-  const [prices,setPrices]=useState<CryptoPrice[]>([]);
-  const [btForm,setBtForm]=useState({symbol:'BTC-USD'});
-  const [btRunning,setBtR]=useState(false);
-  const [btResult,setBtRes]=useState<BtRun|null>(null);
-  const [btErr,setBtErr]=useState('');
-  const [prevRuns,setPrevRuns]=useState<BtRun[]>([]);
-  useEffect(()=>{
-    fetch('/api/crypto').then(r=>r.json()).then(d=>{if(d.prices)setPrices(d.prices);});
-    fetch('/api/deepbacktest').then(r=>r.json()).then(d=>setPrevRuns(d.results??[]));
-    const i=setInterval(()=>fetch('/api/crypto').then(r=>r.json()).then(d=>{if(d.prices)setPrices(d.prices);}),30000);
-    return()=>clearInterval(i);
-  },[]);
-  const runBt=async()=>{setBtR(true);setBtRes(null);setBtErr('');try{const r=await fetch('/api/deepbacktest',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({symbol:btForm.symbol,marketSection:'crypto'})});const d=await r.json();if(d.error)setBtErr(d.error);else{setBtRes(d.run);setPrevRuns(p=>[d.run,...p]);}}catch(e){setBtErr(String(e));}setBtR(false);};
-  const cryptoSetups=setups.filter(s=>s.market_section==='crypto'||['BTC','ETH','SOL','BNB','XRP','ADA','AVAX','DOGE'].some(c=>s.symbol?.toUpperCase().includes(c)));
-  const inp="bg-zinc-800 border border-zinc-700 rounded-lg px-2 py-1.5 text-xs text-zinc-200 focus:outline-none focus:border-zinc-500";
-  return(
-    <div className="flex flex-col gap-4 h-full overflow-y-auto pb-6">
-      <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
-        <div className="text-zinc-500 text-xs uppercase tracking-wider mb-3">Live Prices · Yahoo Finance</div>
-        <div className="grid grid-cols-4 gap-2">
-          {prices.length===0?<div className="col-span-4 text-zinc-600 text-xs">Loading...</div>:prices.map(p=><PCard key={p.symbol} name={p.name} price={p.price?`$${p.price>1000?p.price.toLocaleString('en-US',{maximumFractionDigits:0}):p.price.toFixed(4)}`:'—'} change={p.change24h}/>)}
-        </div>
-      </div>
-      <div className="grid grid-cols-2 gap-4">
-        <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
-          <div className="flex justify-between items-center mb-3"><span className="text-zinc-500 text-xs uppercase tracking-wider">ICT Setups · Crypto</span><span className="text-zinc-600 text-xs">{cryptoSetups.length}</span></div>
-          {cryptoSetups.length===0?<div className="text-zinc-600 text-xs">No crypto setups — run Scan with BTC/ETH</div>:cryptoSetups.map(s=>(
-            <div key={s.id} className="border border-zinc-800 hover:border-zinc-700 rounded-lg px-3 py-2.5 mb-2 transition-colors">
-              <div className="flex justify-between items-center mb-1.5">
-                <div className="flex items-center gap-2"><span className="text-white text-xs font-semibold">{s.symbol}</span><span className="text-xs font-medium" style={{color:dc(s.direction)}}>{s.direction}</span><span className="text-zinc-400 text-xs">{s.setup_type}</span></div>
-                <div className="flex items-center gap-1.5"><Ring score={s.confluence_score}/><button onClick={()=>onChart(s)} className="text-zinc-600 hover:text-blue-400 text-xs transition-colors">chart</button><button onClick={()=>onDelete(s.id)} className="text-zinc-700 hover:text-red-400 text-xs transition-colors">✕</button></div>
-              </div>
-              <div className="flex gap-3 text-xs text-zinc-500"><span>E <span className="text-zinc-300">{f(s.entry_low)}–{f(s.entry_high)}</span></span><span className="text-red-400/70">SL {f(s.stop_loss)}</span><span className="text-emerald-400/70">TP {f(s.target)}</span></div>
-            </div>
-          ))}
-        </div>
-        <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
-          <div className="text-zinc-500 text-xs uppercase tracking-wider mb-3">10-Year ICT Backtest · Real Daily Data</div>
-          <div className="flex gap-2 items-end mb-3">
-            <div><label className="text-zinc-600 text-xs block mb-1">Symbol</label>
-              <select className={inp} value={btForm.symbol} onChange={e=>setBtForm({symbol:e.target.value})}>
-                {['BTC-USD','ETH-USD','SOL-USD','BNB-USD','XRP-USD'].map(s=><option key={s}>{s}</option>)}
-              </select></div>
-            <button onClick={runBt} disabled={btRunning} className="bg-zinc-700 hover:bg-zinc-600 disabled:opacity-40 text-zinc-200 text-xs px-4 py-1.5 rounded-lg transition-colors">{btRunning?'Running 10yrs...':'Run Backtest'}</button>
-          </div>
-          {btErr&&<div className="text-red-400/70 text-xs bg-red-500/5 rounded p-2 mb-2">{btErr}</div>}
-          {btResult&&(
-            <div>
-              <div className="grid grid-cols-3 gap-2 text-xs mb-3">
-                {[['Signals',btResult.total_signals],['Win Rate',btResult.win_rate+'%'],['Avg R:R',btResult.avg_rr+'R'],['Profit Factor',btResult.profit_factor],['Best Year',btResult.best_year],['Worst Year',btResult.worst_year]].map(([l,v])=>(
-                  <div key={l as string} className="bg-zinc-800 rounded-lg p-2"><div className="text-zinc-500 mb-0.5 text-xs">{l}</div><div className="text-zinc-200">{v}</div></div>
-                ))}
-              </div>
-              <div className="text-zinc-600 text-xs mb-1.5">Yearly win rates:</div>
-              <div className="flex flex-wrap gap-1.5">
-                {Object.entries(btResult.yearly_breakdown).sort(([a],[b])=>a.localeCompare(b)).map(([yr,s])=>{const wr=s.total>0?Math.round(s.wins/s.total*100):0;return(<span key={yr} className={`text-xs px-2 py-0.5 rounded ${wr>=55?'bg-emerald-500/10 text-emerald-400':'bg-red-500/10 text-red-400'}`}>{yr} {wr}%</span>);})}
-              </div>
-            </div>
-          )}
-          {!btResult&&prevRuns.length>0&&(
-            <div>
-              <div className="text-zinc-600 text-xs mb-2">Previous runs:</div>
-              {prevRuns.slice(0,4).map(r=><div key={r.id} className="flex justify-between text-xs py-1 border-b border-zinc-800/50"><span className="text-zinc-400">{r.symbol}</span><span className={r.win_rate>=55?'text-emerald-400':'text-red-400'}>{r.win_rate}%</span><span className="text-zinc-500">{r.total_signals} signals</span><span className="text-blue-400">{r.profit_factor}PF</span></div>)}
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ── FOREX TAB ─────────────────────────────────────────────────────
-function ForexTab({setups,onChart,onDelete}:{setups:Setup[];onChart:(s:Setup)=>void;onDelete:(id:string)=>void}){
-  const [data,setData]=useState<{forex:Quote[];commodities:Quote[]}>({forex:[],commodities:[]});
-  useEffect(()=>{
-    fetch('/api/forex').then(r=>r.json()).then(d=>setData({forex:d.forex??[],commodities:d.commodities??[]}));
-    const i=setInterval(()=>fetch('/api/forex').then(r=>r.json()).then(d=>setData({forex:d.forex??[],commodities:d.commodities??[]})),30000);
-    return()=>clearInterval(i);
-  },[]);
-  const fxSetups=setups.filter(s=>s.market_section==='forex'||['EUR','GBP','USD','JPY','AUD','CAD','CHF','XAU','CL','GC'].some(c=>s.symbol?.toUpperCase().includes(c)));
-  return(
-    <div className="flex flex-col gap-4 h-full overflow-y-auto pb-6">
-      <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
-        <div className="text-zinc-500 text-xs uppercase tracking-wider mb-3">Forex Pairs · Live</div>
-        <div className="grid grid-cols-4 gap-2">
-          {data.forex.length===0?<div className="col-span-4 text-zinc-600 text-xs">Loading...</div>:data.forex.map(p=><PCard key={p.symbol} name={p.name} price={p.price?.toFixed(4)??'—'} change={p.change}/>)}
-        </div>
-      </div>
-      <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
-        <div className="text-zinc-500 text-xs uppercase tracking-wider mb-3">Commodities · Live</div>
-        <div className="grid grid-cols-4 gap-2">
-          {data.commodities.length===0?<div className="col-span-4 text-zinc-600 text-xs">Loading...</div>:data.commodities.map(p=><PCard key={p.symbol} name={p.name} price={p.price?`$${p.price.toFixed(2)}`:'—'} change={p.change}/>)}
-        </div>
-      </div>
-      <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
-        <div className="flex justify-between items-center mb-3"><span className="text-zinc-500 text-xs uppercase tracking-wider">ICT Setups · Forex</span><span className="text-zinc-600 text-xs">{fxSetups.length}</span></div>
-        {fxSetups.length===0?<div className="text-zinc-600 text-xs">No forex setups — run Scan with EUR/GBP/XAU symbols</div>:fxSetups.map(s=>(
-          <div key={s.id} className="border border-zinc-800 hover:border-zinc-700 rounded-lg px-3 py-2.5 mb-2 transition-colors">
-            <div className="flex justify-between items-center mb-1"><div className="flex items-center gap-2"><span className="text-white text-xs font-semibold">{s.symbol}</span><span style={{color:dc(s.direction)}} className="text-xs">{s.direction}</span><span className="text-zinc-400 text-xs">{s.setup_type}</span></div><div className="flex items-center gap-1.5"><Ring score={s.confluence_score}/><button onClick={()=>onChart(s)} className="text-zinc-600 hover:text-blue-400 text-xs">chart</button><button onClick={()=>onDelete(s.id)} className="text-zinc-700 hover:text-red-400 text-xs">✕</button></div></div>
-            <div className="flex gap-3 text-xs text-zinc-500"><span>E <span className="text-zinc-300">{f(s.entry_low,4)}–{f(s.entry_high,4)}</span></span><span className="text-red-400/70">SL {f(s.stop_loss,4)}</span><span className="text-emerald-400/70">TP {f(s.target,4)}</span></div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-// ── STOCKS TAB ────────────────────────────────────────────────────
-function StocksTab({setups,onChart,onDelete}:{setups:Setup[];onChart:(s:Setup)=>void;onDelete:(id:string)=>void}){
-  const [data,setData]=useState<{indices:Quote[];etfs:Quote[];stocks:Quote[]}>({indices:[],etfs:[],stocks:[]});
-  useEffect(()=>{
-    fetch('/api/stocks').then(r=>r.json()).then(d=>setData({indices:d.indices??[],etfs:d.etfs??[],stocks:d.stocks??[]}));
-    const i=setInterval(()=>fetch('/api/stocks').then(r=>r.json()).then(d=>setData({indices:d.indices??[],etfs:d.etfs??[],stocks:d.stocks??[]})),30000);
-    return()=>clearInterval(i);
-  },[]);
-  const stkSetups=setups.filter(s=>s.market_section==='stocks'||['SPY','QQQ','AAPL','NVDA','MSFT','AMZN','META','GOOGL','TSLA','IWM'].some(c=>s.symbol?.toUpperCase().includes(c)));
-  return(
-    <div className="flex flex-col gap-4 h-full overflow-y-auto pb-6">
-      <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
-        <div className="text-zinc-500 text-xs uppercase tracking-wider mb-3">Major Indices · Live</div>
-        <div className="grid grid-cols-5 gap-2">
-          {data.indices.map(p=><PCard key={p.symbol} name={p.name} price={p.price?p.price.toLocaleString('en-US',{maximumFractionDigits:1}):'—'} change={p.change}/>)}
-        </div>
-      </div>
-      <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
-        <div className="text-zinc-500 text-xs uppercase tracking-wider mb-3">ETFs · Live</div>
-        <div className="grid grid-cols-5 gap-2">
-          {data.etfs.map(p=><PCard key={p.symbol} name={p.name} price={p.price?`$${p.price.toFixed(2)}`:'—'} change={p.change} sub={p.symbol}/>)}
-        </div>
-      </div>
-      <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
-        <div className="text-zinc-500 text-xs uppercase tracking-wider mb-3">Mega Cap Stocks · Live</div>
-        <div className="grid grid-cols-4 gap-2">
-          {data.stocks.map(p=><PCard key={p.symbol} name={p.name} price={p.price?`$${p.price.toFixed(2)}`:'—'} change={p.change} sub={p.symbol}/>)}
-        </div>
-      </div>
-      <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
-        <div className="flex justify-between items-center mb-3"><span className="text-zinc-500 text-xs uppercase tracking-wider">ICT Setups · Stocks</span><span className="text-zinc-600 text-xs">{stkSetups.length}</span></div>
-        {stkSetups.length===0?<div className="text-zinc-600 text-xs">No stock setups — run Scan with SPY/QQQ/AAPL symbols</div>:stkSetups.map(s=>(
-          <div key={s.id} className="border border-zinc-800 hover:border-zinc-700 rounded-lg px-3 py-2.5 mb-2">
-            <div className="flex justify-between items-center mb-1"><div className="flex items-center gap-2"><span className="text-white text-xs font-semibold">{s.symbol}</span><span style={{color:dc(s.direction)}} className="text-xs">{s.direction}</span><span className="text-zinc-400 text-xs">{s.setup_type}</span></div><div className="flex items-center gap-1.5"><Ring score={s.confluence_score}/><button onClick={()=>onChart(s)} className="text-zinc-600 hover:text-blue-400 text-xs">chart</button><button onClick={()=>onDelete(s.id)} className="text-zinc-700 hover:text-red-400 text-xs">✕</button></div></div>
-            <div className="flex gap-3 text-xs text-zinc-500"><span>E <span className="text-zinc-300">{f(s.entry_low)}–{f(s.entry_high)}</span></span><span className="text-red-400/70">SL {f(s.stop_loss)}</span><span className="text-emerald-400/70">TP {f(s.target)}</span></div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-// ── INSTITUTIONAL TAB ──────────────────────────────────────────────
-function InstitutionalTab(){
-  const [news,setNews]=useState<{headline:string;release_time:string;symbol:string}[]>([]);
-  useEffect(()=>{sb.from('news_cache').select('*').order('release_time',{ascending:false}).limit(20).then(({data})=>{if(data)setNews(data as typeof news);});},[]);
-  return(
-    <div className="flex flex-col gap-4 h-full overflow-y-auto pb-6">
-      <div className="grid grid-cols-3 gap-4">
-        {[
-          {title:'BlackRock (BLK)',desc:'Worlds largest asset manager. $10T AUM. Tracks institutional fund flows, ETF inflows, and systematic position changes.'},
-          {title:'Bridgewater Associates',desc:'Ray Dalios All Weather fund. Macro-driven. Uses debt cycle, growth cycle, and inflationary analysis for long-term positioning.'},
-          {title:'Citadel / Two Sigma',desc:'Quantitative HFT and systematic macro. These players drive intraday liquidity sweeps and algorithmic order flow.'},
-        ].map(({title,desc})=>(
-          <div key={title} className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
-            <div className="text-zinc-200 text-xs font-semibold mb-2">{title}</div>
-            <div className="text-zinc-500 text-xs leading-relaxed">{desc}</div>
-          </div>
-        ))}
-      </div>
-      <div className="grid grid-cols-2 gap-4">
-        <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
-          <div className="text-zinc-500 text-xs uppercase tracking-wider mb-3">What to Watch</div>
-          {[['Fed Balance Sheet','Total assets held. Expansion = risk on. Contraction = risk off.'],['COT Report','Commitments of Traders. Commercial hedgers (smart money) vs specs (retail).'],['13F Filings','Quarterly fund holdings. 45-day lag but shows macro positioning.'],['Treasury Yields','10Y minus 2Y spread. Inverted = risk off. Steepening = expansion.'],['DXY Correlation','Strong DXY = weak equities/crypto/commodities. Inverse always.']].map(([k,v])=>(
-            <div key={k} className="border-b border-zinc-800/60 py-2 last:border-0">
-              <div className="text-zinc-300 text-xs font-medium">{k}</div>
-              <div className="text-zinc-500 text-xs mt-0.5">{v}</div>
-            </div>
-          ))}
-        </div>
-        <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
-          <div className="text-zinc-500 text-xs uppercase tracking-wider mb-3">Market News Cache</div>
-          {news.length===0?<div className="text-zinc-600 text-xs">News cache loading...</div>:news.slice(0,10).map((n,i)=>(
-            <div key={i} className="border-b border-zinc-800/50 py-2 last:border-0">
-              <div className="text-zinc-300 text-xs leading-snug">{n.headline}</div>
-              <div className="text-zinc-600 text-xs mt-0.5">{n.release_time?new Date(n.release_time).toLocaleDateString():''} · {n.symbol}</div>
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ── FUTURES TAB ────────────────────────────────────────────────────
-function FuturesTab({setups,prices,kz,calNews,onChart,onDelete}:{setups:Setup[];prices:Prices;kz:KZ|null;calNews:CalEvent[];onChart:(s:Setup)=>void;onDelete:(id:string)=>void}){
-  const [sel,setSel]=useState<Setup|null>(null);
-  const [ai,setAi]=useState('');
-  const [aiLoad,setAiLoad]=useState(false);
-  const futSetups=setups.filter(s=>!s.market_section||s.market_section==='futures');
-  const dangerNews=calNews.some(e=>e.isDangerZone);
-
-  const runAI=async()=>{
-    if(!sel)return;
-    const p=prices[sel.symbol as keyof Prices];
-    const isBull=sel.direction==='bull'||sel.direction==='long';
-    const slB=p!==null&&(isBull?p<sel.stop_loss:p>sel.stop_loss);
-    const exp=sel.expires_at&&new Date(sel.expires_at)<new Date();
-    if(slB||exp){setAi(`INVALIDATED — ${slB?`SL at ${f(sel.stop_loss)} breached`:'expired'}.\n\nDo not trade this.`);return;}
-    setAiLoad(true);setAi('');
-    try{const r=await fetch('/api/analyze',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({setup:sel,prices,market:'futures'})});const d=await r.json();setAi(d.analysis||d.error||'No response');}catch(e){setAi(String(e));}
-    setAiLoad(false);
+// ── SCAN MODAL ──
+function ScanModal({ prices, onClose, onDone }: { prices:Prices; onClose:()=>void; onDone:()=>void }) {
+  const [syms, setSyms] = useState<string[]>(['NQ','ES']);
+  const [tfs, setTfs] = useState<string[]>(['15m','1h']);
+  const [scanning, setScanning] = useState(false);
+  const [result, setResult] = useState<{message?:string;error?:string;count?:number;debug?:string[]}|null>(null);
+  const tog = (arr:string[], set:(a:string[])=>void, v:string) => set(arr.includes(v)?arr.filter(x=>x!==v):[...arr,v]);
+  const scan = async () => {
+    setScanning(true); setResult(null);
+    try {
+      const r = await fetch('/api/autoscan',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({symbols:syms,timeframes:tfs,currentPrices:prices})});
+      const d = await r.json();
+      setResult(d);
+      if ((d.count??0) > 0) setTimeout(onDone, 1500);
+    } catch(e){ setResult({error:String(e)}); }
+    setScanning(false);
   };
-
-  const dolQ=sel?[
-    {q:'Price location',a:(()=>{const p=prices[sel.symbol as keyof Prices];return p?(p<sel.entry_low?`Below zone — ${(sel.entry_low-p).toFixed(0)}pts`:p>sel.entry_high?`Above zone — ${(p-sel.entry_high).toFixed(0)}pts`:`INSIDE ZONE (${p.toFixed(1)})`):'—';})()},
-    {q:'Draw on Liquidity',a:sel.dol_target||'—'},
-    {q:'PD Array',a:`${sel.setup_type} · ${f(sel.entry_low)}–${f(sel.entry_high)}`},
-    {q:'Correlated',a:sel.correlated_align?`Aligned (${sel.symbol==='NQ'?'ES':'NQ'} confirms)`:'Not confirmed'},
-    {q:'CISD',a:sel.cisd_confirmed?'Full body close confirmed':'Pending — await full body close'},
-    {q:'Killzone',a:kz?.active?`${kz.active.name} ACTIVE · ${kz.probability}`:`No active KZ · Next: ${kz?.upcoming[0]?.name??'—'} in ${kz?.upcoming[0]?.minsAway??'?'}m`},
-  ]:[];
-
-  return(
-    <div className="h-full grid grid-cols-12 gap-3">
-      <div className="col-span-12 grid grid-cols-6 gap-2">
-        {[
-          {l:'NQ',v:prices.NQ?.toFixed(1)??'—',c:prices.NQ&&prices.NQ>29000?'text-emerald-400':'text-red-400'},
-          {l:'ES',v:prices.ES?.toFixed(1)??'—',c:'text-zinc-300'},
-          {l:'GC',v:prices.GC?.toFixed(1)??'—',c:'text-yellow-400'},
-          {l:'DXY',v:prices.DXY?.toFixed(3)??'—',c:'text-zinc-400'},
-          {l:'VIX',v:prices.VIX?.toFixed(2)??'—',c:prices.VIX&&prices.VIX>20?'text-red-400':'text-emerald-400'},
-          {l:'Session',v:kz?.active?.short??'OFF HOURS',c:kz?.active?'text-emerald-400':'text-zinc-500'},
-        ].map(s=><div key={s.l} className="bg-zinc-900 border border-zinc-800 rounded-xl p-3"><div className="text-zinc-500 text-xs mb-1">{s.l}</div><div className={`text-base font-semibold ${s.c}`}>{s.v}</div></div>)}
-      </div>
-      <div className="col-span-7 flex flex-col gap-2 overflow-hidden">
-        <div className="text-zinc-500 text-xs uppercase tracking-wider">{dangerNews&&<span className="text-red-400 mr-2">⚠ NEWS RISK</span>}Active Setups · {futSetups.length}</div>
-        <div className="overflow-y-auto flex-1 space-y-1.5 pb-2">
-          {futSetups.length===0&&<div className="text-center py-16 text-zinc-600 text-sm">No setups — run Scan</div>}
-          {futSetups.map(s=>{
-            const p=prices[s.symbol as keyof Prices];
-            const inZone=p!==null&&p>=s.entry_low&&p<=s.entry_high;
-            const slB=p!==null&&(s.direction==='bull'?p<s.stop_loss:p>s.stop_loss);
-            return(
-              <div key={s.id} onClick={()=>{setSel(s);setAi(s.ai_analysis||'');}}
-                className={`rounded-xl border px-4 py-3 cursor-pointer transition-all ${sel?.id===s.id?'border-zinc-600 bg-zinc-800/60':'border-zinc-800 hover:border-zinc-700 bg-zinc-900/50'} ${slB?'opacity-30':''}`}>
-                <div className="flex items-center justify-between mb-1.5">
-                  <div className="flex items-center gap-2.5">
-                    <span className="text-white font-semibold text-xs">{s.symbol}</span>
-                    <span className="text-zinc-400 text-xs">{s.timeframe}</span>
-                    <span className="text-xs font-medium" style={{color:dc(s.direction)}}>{s.direction}</span>
-                    <span className="text-zinc-400 text-xs">{s.setup_type}</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {inZone&&<span className="text-emerald-400 text-xs animate-pulse font-medium">ENTRY</span>}
-                    {slB&&<span className="text-red-400 text-xs font-medium">SL HIT</span>}
-                    <Ring score={s.confluence_score}/>
-                    <button onClick={e=>{e.stopPropagation();onChart(s);}} className="text-zinc-600 hover:text-blue-400 text-xs transition-colors">chart</button>
-                    <button onClick={e=>{e.stopPropagation();onDelete(s.id);}} className="text-zinc-700 hover:text-red-400 text-xs transition-colors">✕</button>
-                  </div>
-                </div>
-                <div className="flex gap-4 text-xs text-zinc-500">
-                  <span>E <span className="text-zinc-300">{f(s.entry_low)}–{f(s.entry_high)}</span></span>
-                  <span>SL <span className="text-red-400/70">{f(s.stop_loss)}</span></span>
-                  <span>TP <span className="text-emerald-400/70">{f(s.target)}</span></span>
-                  <span>{f(s.rr_ratio,1)}R</span>
-                  <span className="ml-auto text-zinc-600">{s.cisd_confirmed?'cisd✓':'cisd○'} · {s.htf_bias?.slice(0,4)}</span>
-                </div>
-              </div>
-            );
-          })}
+  return (
+    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4" onClick={e=>e.target===e.currentTarget&&onClose()}>
+      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-md p-6 space-y-5">
+        <div className="flex justify-between items-center">
+          <span className="text-sm font-mono text-zinc-300">Auto Scan · Live Market</span>
+          <button onClick={onClose} className="text-zinc-600 hover:text-zinc-300">x</button>
         </div>
-      </div>
-      <div className="col-span-5 flex flex-col gap-3 overflow-hidden">
-        <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-3 shrink-0">
-          <div className="text-zinc-500 text-xs uppercase tracking-wider mb-2.5">DOL Framework · 6 Questions</div>
-          {dolQ.length>0?dolQ.map((q,i)=>(
-            <div key={i} className="flex gap-2 text-xs py-0.5">
-              <span className="text-zinc-700 w-4 shrink-0">{i+1}</span>
-              <span className="text-zinc-500 w-24 shrink-0">{q.q}</span>
-              <span className={`${i===4&&!sel?.cisd_confirmed?'text-yellow-400/80':'text-zinc-300'}`}>{q.a}</span>
-            </div>
-          )):<div className="text-zinc-700 text-xs">Select a setup</div>}
-        </div>
-        <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-3 flex-1 flex flex-col min-h-0">
-          <div className="flex items-center justify-between mb-2.5 shrink-0">
-            <span className="text-zinc-500 text-xs uppercase tracking-wider">AI · ICT Methodology</span>
-            <button onClick={runAI} disabled={!sel||aiLoad} className="text-xs px-3 py-1 bg-zinc-800 hover:bg-zinc-700 disabled:opacity-30 text-zinc-300 rounded-lg transition-colors">{aiLoad?'Analysing...':'Analyse'}</button>
-          </div>
-          {sel&&<div className="text-zinc-500 text-xs mb-2 shrink-0">{sel.symbol} · {sel.setup_type}</div>}
-          <div className="flex-1 overflow-y-auto">
-            {ai?<pre className={`text-xs leading-relaxed whitespace-pre-wrap ${ai.startsWith('INVALIDATED')?'text-red-400/70':'text-zinc-300'}`}>{ai}</pre>:<div className="text-zinc-700 text-xs">{sel?'Click Analyse':'Select a setup'}</div>}
-          </div>
-        </div>
-        <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-3 shrink-0">
-          <div className="grid grid-cols-6 gap-1 mb-2.5">
-            {[{s:'ASIA',c:'#6366f1'},{s:'LON',c:'#f59e0b'},{s:'NY',c:'#10b981'},{s:'SB',c:'#3b82f6'},{s:'LCL',c:'#f87171'},{s:'NYA',c:'#a855f7'}].map(z=>{
-              const isA=kz?.active?.short===z.s;
-              return <div key={z.s} className="rounded-lg py-1.5 text-center" style={{background:isA?z.c+'18':'rgba(255,255,255,0.03)',border:`0.5px solid ${isA?z.c+'50':'rgba(255,255,255,0.07)'}`}}>
-                <div className="text-xs font-medium" style={{color:isA?z.c:'rgba(255,255,255,0.3)',fontSize:'10px'}}>{z.s}</div>
-                {isA&&<div className="text-xs animate-pulse" style={{color:z.c,fontSize:'9px'}}>LIVE</div>}
-              </div>;
-            })}
-          </div>
-          {calNews.slice(0,4).map((e,i)=>(
-            <div key={i} className={`flex justify-between text-xs py-0.5 ${e.isDangerZone?'text-red-400 animate-pulse':e.isToday?'text-yellow-400/80':'text-zinc-600'}`}>
-              <span className="truncate mr-2">{e.name}</span>
-              <span className="shrink-0">{e.isToday?(e.minutesAway!==null?(e.minutesAway>0?`${e.minutesAway}m`:`${Math.abs(e.minutesAway)}m ago`):'TODAY'):e.date}</span>
-            </div>
+        <div className="bg-zinc-800/50 rounded-xl p-3 grid grid-cols-2 gap-1">
+          {([['NQ',fmt(prices.NQ)],['ES',fmt(prices.ES)],['GC',fmt(prices.GC)],['DXY',fmt(prices.DXY,3)]] as [string,string][]).map(([l,v])=>(
+            <div key={l} className="flex justify-between text-xs"><span className="text-zinc-500">{l}</span><span className="text-zinc-200 font-mono">{v}</span></div>
           ))}
         </div>
+        <div>
+          <p className="text-xs text-zinc-500 mb-2">Symbols</p>
+          <div className="flex gap-2 flex-wrap">
+            {['NQ','ES','BTC','ETH','SOL'].map(s=>(
+              <button key={s} onClick={()=>tog(syms,setSyms,s)} className={cx('px-3 py-1.5 rounded-lg text-xs font-mono border transition-all',syms.includes(s)?'bg-zinc-700 border-zinc-500 text-white':'border-zinc-700 text-zinc-500 hover:border-zinc-500')}>{s}</button>
+            ))}
+          </div>
+        </div>
+        <div>
+          <p className="text-xs text-zinc-500 mb-2">Timeframes</p>
+          <div className="flex gap-2">
+            {['15m','1h','4h'].map(t=>(
+              <button key={t} onClick={()=>tog(tfs,setTfs,t)} className={cx('px-3 py-1.5 rounded-lg text-xs font-mono border transition-all',tfs.includes(t)?'bg-zinc-700 border-zinc-500 text-white':'border-zinc-700 text-zinc-500 hover:border-zinc-500')}>{t}</button>
+            ))}
+          </div>
+        </div>
+        <button onClick={scan} disabled={scanning||syms.length===0} className="w-full py-3 rounded-xl bg-zinc-700 hover:bg-zinc-600 text-sm text-white font-medium disabled:opacity-40 transition-all">
+          {scanning ? 'Scanning market...' : 'Scan Now'}
+        </button>
+        {result && (
+          <div className={cx('text-xs p-3 rounded-lg border font-mono',result.error?'border-red-800 bg-red-900/20 text-red-400':'border-zinc-700 bg-zinc-800/50 text-zinc-300')}>
+            {result.error ?? result.message}
+          </div>
+        )}
+        {result?.debug && (
+          <details className="text-xs text-zinc-600">
+            <summary className="cursor-pointer">Debug log</summary>
+            <pre className="mt-1 text-xs whitespace-pre-wrap">{result.debug.join('\n')}</pre>
+          </details>
+        )}
       </div>
     </div>
   );
 }
 
-// ── SCAN MODAL ────────────────────────────────────────────────────
-function ScanModal({prices,kz,onClose,onSaved}:{prices:Prices;kz:KZ|null;onClose:()=>void;onSaved:()=>void}){
-  const [syms,setSyms]=useState<string[]>(['NQ','ES']);
-  const [tfs,setTfs]=useState<string[]>(['15m','1h']);
-  const [loading,setLoading]=useState(false);
-  const [result,setResult]=useState<{message:string;count:number;setups:{symbol:string;timeframe:string;direction:string;setup_type:string;entry_low:number;entry_high:number;stop_loss:number;target:number;rr_ratio:number;confluence_score:number}[]}|null>(null);
-  const [err,setErr]=useState('');
-  const togS=(s:string)=>setSyms(p=>p.includes(s)?p.filter(x=>x!==s):[...p,s]);
-  const togT=(t:string)=>setTfs(p=>p.includes(t)?p.filter(x=>x!==t):[...p,t]);
-  const scan=async()=>{setLoading(true);setResult(null);setErr('');try{const r=await fetch('/api/autoscan',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({symbols:syms,timeframes:tfs,currentPrices:prices})});const d=await r.json();if(d.error)setErr(typeof d.error==='string'?d.error:JSON.stringify(d.error));else setResult(d);}catch(e){setErr(String(e));}setLoading(false);};
-  const btn=(a:boolean)=>`text-xs px-3 py-1.5 rounded-lg border transition-colors ${a?'border-zinc-500 bg-zinc-700 text-zinc-200':'border-zinc-700 text-zinc-500 hover:border-zinc-600'}`;
-  return(
-    <div className="fixed inset-0 bg-black/75 flex items-center justify-center z-50" onClick={onClose}>
-      <div className="bg-zinc-900 border border-zinc-700 rounded-2xl p-5 w-[420px] max-h-[85vh] overflow-y-auto" onClick={e=>e.stopPropagation()}>
-        <div className="flex justify-between items-center mb-4"><span className="text-zinc-100 text-sm font-semibold">Auto Scan · Live Market</span><button onClick={onClose} className="text-zinc-500 hover:text-zinc-300 text-lg">×</button></div>
-        <div className="grid grid-cols-2 gap-2 bg-zinc-800/50 rounded-xl p-3 text-xs mb-4">
-          {(['NQ','ES','GC','DXY'] as const).map(s=><div key={s} className="flex justify-between"><span className="text-zinc-500">{s}</span><span className="text-zinc-200">{prices[s]?.toFixed(s==='DXY'?3:1)??'—'}</span></div>)}
+// ── TRADE MODAL ──
+function TradeModal({ setup, onClose, onSaved }: { setup?:Setup|null; onClose:()=>void; onSaved:()=>void }) {
+  const [form, setForm] = useState({
+    symbol: setup?.symbol??'NQ', direction: setup?.direction??'bull',
+    setup_type: setup?.setup_type??'FVG Retest',
+    entry_price: setup ? String(((setup.entry_low+setup.entry_high)/2).toFixed(2)) : '',
+    exit_price: '', stop_loss: setup?.stop_loss?.toString()??'',
+    target: setup?.target?.toString()??'', contracts: '1',
+    account_size: '100000', risk_percent: '1', notes: '', setup_id: setup?.id??''
+  });
+  const [saving, setSaving] = useState(false);
+  const ep=parseFloat(form.entry_price)||0, sl=parseFloat(form.stop_loss)||0, tp=parseFloat(form.target)||0;
+  const risk=Math.abs(ep-sl);
+  const rr=risk>0?(Math.abs(tp-ep)/risk).toFixed(2):'--';
+  const riskUsd=((parseFloat(form.account_size)||100000)*((parseFloat(form.risk_percent)||1)/100)).toFixed(0);
+  const inp = "w-full bg-zinc-800 border border-zinc-700 rounded-lg px-2 py-1.5 text-xs text-zinc-200 focus:outline-none focus:border-zinc-500";
+  const set = (k:string) => (e:React.ChangeEvent<HTMLInputElement|HTMLTextAreaElement|HTMLSelectElement>) => setForm(p=>({...p,[k]:e.target.value}));
+  const save = async () => {
+    setSaving(true);
+    await fetch('/api/trades',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
+      ...form, entry_price:parseFloat(form.entry_price), exit_price:form.exit_price?parseFloat(form.exit_price):null,
+      stop_loss:parseFloat(form.stop_loss), target:parseFloat(form.target),
+      contracts:parseFloat(form.contracts), account_size:parseFloat(form.account_size), risk_percent:parseFloat(form.risk_percent)
+    })});
+    setSaving(false); onSaved(); onClose();
+  };
+  return (
+    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4" onClick={e=>e.target===e.currentTarget&&onClose()}>
+      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-lg p-6 space-y-4 max-h-[90vh] overflow-y-auto">
+        <div className="flex justify-between items-center">
+          <span className="text-sm font-mono text-zinc-300">Log Trade</span>
+          <button onClick={onClose} className="text-zinc-600 hover:text-zinc-300">x</button>
         </div>
-        <div className="mb-3"><div className="text-zinc-500 text-xs mb-2">Symbols</div><div className="flex flex-wrap gap-2">{['NQ','ES','BTC','ETH','SOL'].map(s=><button key={s} onClick={()=>togS(s)} className={btn(syms.includes(s))}>{s}</button>)}</div></div>
-        <div className="mb-4"><div className="text-zinc-500 text-xs mb-2">Timeframes</div><div className="flex gap-2">{['15m','1h','4h'].map(t=><button key={t} onClick={()=>togT(t)} className={btn(tfs.includes(t))}>{t}</button>)}</div></div>
-        <button onClick={scan} disabled={loading||!syms.length||!tfs.length} className="w-full bg-zinc-700 hover:bg-zinc-600 disabled:opacity-40 text-zinc-100 text-sm py-2.5 rounded-xl font-medium mb-4 transition-colors">{loading?'Scanning live candles...':'Scan Now'}</button>
-        {err&&<div className="text-red-400/80 text-xs bg-red-500/5 border border-red-500/20 rounded-xl p-3 mb-3">{err}</div>}
-        {result&&(
-          <div className={`rounded-xl p-3 text-xs ${result.count>0?'bg-emerald-500/5 border border-emerald-500/20':'bg-yellow-500/5 border border-yellow-500/20'}`}>
-            <div className={`font-semibold mb-2 ${result.count>0?'text-emerald-400':'text-yellow-400'}`}>{result.message}</div>
-            {result.setups?.map((s,i)=>(
-              <div key={i} className="border-t border-zinc-800 pt-2 mt-2 first:border-0 first:mt-0 first:pt-0">
-                <div className="flex justify-between mb-0.5"><span className="text-zinc-200 font-medium">{s.symbol} {s.timeframe}</span><span style={{color:dc(s.direction)}}>{s.direction.toUpperCase()}</span></div>
-                <div className="text-zinc-400">{s.setup_type}</div>
-                <div className="flex gap-3 mt-1 text-zinc-500"><span>E:{f(s.entry_low)}–{f(s.entry_high)}</span><span className="text-red-400/60">SL:{f(s.stop_loss)}</span><span className="text-emerald-400/60">TP:{f(s.target)}</span><span className="text-blue-400/60">{f(s.rr_ratio,1)}R</span></div>
+        <div className="grid grid-cols-2 gap-3">
+          <div><p className="text-xs text-zinc-500 mb-1">Symbol</p><select className={inp} value={form.symbol} onChange={set('symbol')}>{['NQ','ES','GC','BTC','ETH','SOL','EURUSD','GBPUSD'].map(s=><option key={s}>{s}</option>)}</select></div>
+          <div><p className="text-xs text-zinc-500 mb-1">Direction</p><select className={inp} value={form.direction} onChange={set('direction')}><option value="bull">Long</option><option value="bear">Short</option></select></div>
+          {[['entry_price','Entry Price'],['stop_loss','Stop Loss'],['target','Target'],['exit_price','Exit Price (if closed)'],['account_size','Account Size ($)'],['risk_percent','Risk %']].map(([k,l])=>(
+            <div key={k}><p className="text-xs text-zinc-500 mb-1">{l}</p><input className={inp} value={form[k as keyof typeof form]} onChange={set(k)}/></div>
+          ))}
+        </div>
+        <div className="grid grid-cols-3 gap-2 p-3 bg-zinc-800/50 rounded-xl text-xs text-center">
+          <div><div className="text-zinc-500">R:R</div><div className="text-white font-mono">{rr}</div></div>
+          <div><div className="text-zinc-500">Risk $</div><div className="text-white font-mono">${riskUsd}</div></div>
+          <div><div className="text-zinc-500">Contracts</div><input className="w-14 text-center bg-transparent border-b border-zinc-600 text-white font-mono text-xs" value={form.contracts} onChange={set('contracts')}/></div>
+        </div>
+        <div><p className="text-xs text-zinc-500 mb-1">Notes</p><textarea className={cx(inp,'h-16 resize-none')} value={form.notes} onChange={set('notes')}/></div>
+        <button onClick={save} disabled={saving||!form.entry_price||!form.stop_loss} className="w-full py-2.5 rounded-xl bg-zinc-700 hover:bg-zinc-600 text-sm text-white disabled:opacity-40">{saving?'Saving...':'Log Trade'}</button>
+      </div>
+    </div>
+  );
+}
+
+// ── ANALYSIS PANEL ──
+function AnalysisPanel({ setup, prices, onClose }: { setup:Setup; prices:Prices; onClose:()=>void }) {
+  const [loading, setLoading] = useState(false);
+  const [analysis, setAnalysis] = useState(setup.ai_analysis||'');
+  const run = async () => {
+    setLoading(true);
+    const r = await fetch('/api/analyze',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({setup,prices})});
+    const d = await r.json();
+    const text = d.analysis??d.error??'No response';
+    setAnalysis(text);
+    await sb.from('setups').update({ai_analysis:text}).eq('id',setup.id);
+    setLoading(false);
+  };
+  useEffect(()=>{ if(!analysis) run(); },[]);
+  return (
+    <div className="bg-zinc-900 border border-zinc-700 rounded-xl p-4 space-y-3 mt-2">
+      <div className="flex justify-between items-center">
+        <span className="text-xs text-zinc-500 font-mono">AI · {setup.symbol} {setup.timeframe} {setup.setup_type}</span>
+        <div className="flex gap-3">
+          <button onClick={run} className="text-xs text-zinc-600 hover:text-zinc-300">refresh</button>
+          <button onClick={onClose} className="text-xs text-zinc-600 hover:text-zinc-300">close</button>
+        </div>
+      </div>
+      {loading
+        ? <div className="text-xs text-zinc-600 animate-pulse">Analyzing with ICT methodology...</div>
+        : <pre className="text-xs text-zinc-300 whitespace-pre-wrap leading-relaxed">{analysis||'Click refresh to analyze'}</pre>}
+    </div>
+  );
+}
+
+// ── SETUP CARD ──
+function SetupCard({ s, prices, onDelete, onAnalyze, onTrade, selected, onSelect }:{s:Setup;prices:Prices;onDelete:(id:string)=>void;onAnalyze:(s:Setup)=>void;onTrade:(s:Setup)=>void;selected:boolean;onSelect:(s:Setup)=>void}) {
+  const p = prices[s.symbol as keyof Prices];
+  const bull = s.direction==='bull'||s.direction==='long';
+  const slHit = p!=null&&(bull?p<s.stop_loss:p>s.stop_loss);
+  const tpHit = p!=null&&(bull?p>=s.target:p<=s.target);
+  const inEntry = p!=null&&p>=s.entry_low&&p<=s.entry_high;
+  const exp = s.expires_at&&new Date(s.expires_at)<new Date();
+  return (
+    <div className={cx('rounded-xl border p-3 cursor-pointer transition-all hover:border-zinc-600 group',
+      slHit||exp?'border-red-900/60 bg-red-900/10':tpHit?'border-emerald-900/60 bg-emerald-900/10':
+      inEntry?'border-yellow-800/60 bg-yellow-900/10':selected?'border-zinc-600 bg-zinc-800/60':'border-zinc-800 bg-zinc-900/40'
+    )} onClick={()=>onSelect(s)}>
+      <div className="flex justify-between items-start mb-2">
+        <div className="flex items-center gap-2">
+          <span className="font-mono text-sm text-white">{s.symbol}</span>
+          <span className={cx('text-xs px-1.5 py-0.5 rounded font-mono',bull?'bg-emerald-900/50 text-emerald-400':'bg-red-900/50 text-red-400')}>{bull?'+ LONG':'- SHORT'}</span>
+          <span className="text-xs text-zinc-600">{s.timeframe}</span>
+          <span className="text-xs text-zinc-700">{s.setup_type}</span>
+        </div>
+        <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+          <button onClick={e=>{e.stopPropagation();onTrade(s);}} title="Log trade" className="text-xs px-2 py-0.5 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-400">log</button>
+          <button onClick={e=>{e.stopPropagation();onAnalyze(s);}} title="AI analyze" className="text-xs px-2 py-0.5 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-400">ai</button>
+          <button onClick={e=>{e.stopPropagation();onDelete(s.id);}} className="text-xs px-2 py-0.5 rounded bg-zinc-800 hover:bg-red-900/40 text-zinc-600 hover:text-red-400">x</button>
+        </div>
+      </div>
+      <div className="grid grid-cols-3 sm:grid-cols-6 gap-x-3 gap-y-1 text-xs">
+        <div><span className="text-zinc-600">Entry </span><span className="font-mono text-zinc-400">{s.entry_low}-{s.entry_high}</span></div>
+        <div><span className="text-zinc-600">SL </span><span className="font-mono text-red-400">{s.stop_loss}</span></div>
+        <div><span className="text-zinc-600">TP </span><span className="font-mono text-emerald-400">{s.target}</span></div>
+        <div><span className="text-zinc-600">R:R </span><span className={cx('font-mono',s.rr_ratio>=3?'text-emerald-400':s.rr_ratio>=2?'text-yellow-400':'text-zinc-500')}>{s.rr_ratio}R</span></div>
+        <div><span className="text-zinc-600">Score </span><span className="font-mono text-zinc-400">{s.confluence_score}</span></div>
+        <div><span className="text-zinc-600">CISD </span><span className={s.cisd_confirmed?'text-emerald-400 font-mono':'text-zinc-700'}>{s.cisd_confirmed?'yes':'—'}</span></div>
+      </div>
+      <div className="flex items-center gap-3 mt-1.5">
+        {(slHit||tpHit||inEntry||exp) && (
+          <span className={cx('text-xs px-2 py-0.5 rounded font-mono',slHit||exp?'bg-red-900/40 text-red-400':tpHit?'bg-emerald-900/40 text-emerald-400':'bg-yellow-900/40 text-yellow-400')}>
+            {exp?'EXPIRED':slHit?'SL HIT':tpHit?'TARGET HIT':'IN ENTRY'}
+          </span>
+        )}
+        {p && <span className="text-xs text-zinc-700 font-mono">{p.toFixed(1)}</span>}
+        {s.dol_target && <span className="text-xs text-zinc-700">{s.dol_target}</span>}
+      </div>
+    </div>
+  );
+}
+
+// ── CRYPTO TAB ──
+function CryptoTab() {
+  const [prices, setPrices] = useState<{symbol:string;name:string;price:number|null;change24h:number|null}[]>([]);
+  useEffect(()=>{ const load=()=>fetch('/api/crypto').then(r=>r.json()).then(d=>{if(d.prices)setPrices(d.prices);}); load(); const i=setInterval(load,30000); return()=>clearInterval(i); },[]);
+  return (
+    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      {prices.map(p=>(
+        <div key={p.symbol} className="bg-zinc-900 border border-zinc-800 rounded-xl p-3">
+          <div className="flex justify-between items-start mb-1">
+            <span className="text-xs text-zinc-500">{p.name}</span>
+            <span className={cx('text-xs font-mono',(p.change24h??0)>=0?'text-emerald-400':'text-red-400')}>{p.change24h!=null?`${p.change24h>=0?'+':''}${p.change24h.toFixed(2)}%`:'—'}</span>
+          </div>
+          <div className="font-mono text-white text-sm">{p.price!=null?(p.price>100?`$${p.price.toLocaleString('en-US',{maximumFractionDigits:0})}`:`$${p.price.toFixed(4)}`):'—'}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ── FOREX TAB ──
+function ForexTab() {
+  const [data, setData] = useState<{forex:{symbol:string;name:string;price:number|null;change:number|null}[];commodities:{symbol:string;name:string;price:number|null;change:number|null}[]}>({forex:[],commodities:[]});
+  useEffect(()=>{ const load=()=>fetch('/api/forex').then(r=>r.json()).then(d=>setData({forex:d.forex??[],commodities:d.commodities??[]})); load(); const i=setInterval(load,30000); return()=>clearInterval(i); },[]);
+  const Row=({q}:{q:{name:string;price:number|null;change:number|null}})=>(
+    <div className="flex justify-between items-center py-2 border-b border-zinc-800/50 last:border-0">
+      <span className="text-xs text-zinc-400">{q.name}</span>
+      <div className="flex gap-3 items-center">
+        <span className={cx('text-xs font-mono',(q.change??0)>=0?'text-emerald-400':'text-red-400')}>{q.change!=null?`${q.change>=0?'+':''}${q.change.toFixed(2)}%`:'—'}</span>
+        <span className="text-xs font-mono text-white w-20 text-right">{q.price!=null?q.price.toFixed(q.price>10?2:4):'—'}</span>
+      </div>
+    </div>
+  );
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4"><p className="text-xs text-zinc-500 mb-3 uppercase tracking-wider">Forex Majors</p>{data.forex.map((q,i)=><Row key={i} q={q}/>)}</div>
+      <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4"><p className="text-xs text-zinc-500 mb-3 uppercase tracking-wider">Commodities</p>{data.commodities.map((q,i)=><Row key={i} q={q}/>)}</div>
+    </div>
+  );
+}
+
+// ── STOCKS TAB ──
+function StocksTab() {
+  const [data, setData] = useState<{indices:{name:string;price:number|null;change:number|null}[];etfs:{symbol:string;name:string;price:number|null;change:number|null}[];stocks:{symbol:string;name:string;price:number|null;change:number|null}[]}>({indices:[],etfs:[],stocks:[]});
+  useEffect(()=>{ const load=()=>fetch('/api/stocks').then(r=>r.json()).then(d=>setData({indices:d.indices??[],etfs:d.etfs??[],stocks:d.stocks??[]})); load(); const i=setInterval(load,30000); return()=>clearInterval(i); },[]);
+  const Q=({q}:{q:{name:string;symbol?:string;price:number|null;change:number|null}})=>(
+    <div className="flex justify-between items-center py-1.5 border-b border-zinc-800/40 last:border-0">
+      <span className="text-xs text-zinc-400">{q.symbol??q.name}</span>
+      <div className="flex gap-3 items-center">
+        <span className={cx('text-xs font-mono',(q.change??0)>=0?'text-emerald-400':'text-red-400')}>{q.change!=null?`${q.change>=0?'+':''}${q.change.toFixed(2)}%`:'—'}</span>
+        <span className="text-xs font-mono text-white w-16 text-right">{q.price!=null?`$${q.price.toFixed(q.price>100?0:2)}`:'—'}</span>
+      </div>
+    </div>
+  );
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4"><p className="text-xs text-zinc-500 mb-3 uppercase tracking-wider">Indices</p>{data.indices.map((q,i)=><Q key={i} q={q}/>)}</div>
+      <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4"><p className="text-xs text-zinc-500 mb-3 uppercase tracking-wider">ETFs</p>{data.etfs.map((q,i)=><Q key={i} q={q}/>)}</div>
+      <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4"><p className="text-xs text-zinc-500 mb-3 uppercase tracking-wider">Stocks</p>{data.stocks.map((q,i)=><Q key={i} q={q}/>)}</div>
+    </div>
+  );
+}
+
+// ── INSTITUTIONAL TAB ──
+function InstitutionalTab() {
+  const [sym,setSym] = useState('NQ');
+  const [cot,setCot] = useState<{date:string;comm_net:number;large_net:number;oi:number}[]>([]);
+  const [loading,setLoading] = useState(false);
+  const load = useCallback(async(s:string)=>{ setLoading(true); const r=await fetch(`/api/cot?symbol=${s}`); const d=await r.json(); setCot(d.data??[]); setLoading(false); },[]);
+  useEffect(()=>{ load(sym); },[sym]);
+  const latest=cot[0], prev=cot[1];
+  const weekChange=latest&&prev?latest.comm_net-prev.comm_net:null;
+  return (
+    <div className="space-y-4">
+      <div className="flex gap-2 flex-wrap">
+        {['NQ','ES','GC','CL','EUR','GBP'].map(s=>(
+          <button key={s} onClick={()=>{setSym(s);load(s);}} className={cx('px-3 py-1.5 rounded-lg text-xs font-mono border transition-all',sym===s?'bg-zinc-700 border-zinc-500 text-white':'border-zinc-700 text-zinc-500 hover:border-zinc-500')}>{s}</button>
+        ))}
+      </div>
+      {loading?<div className="text-xs text-zinc-600 animate-pulse">Loading COT from CFTC...</div>:!latest?(
+        <div className="text-center py-12 text-zinc-600 text-sm">Fetching COT data from CFTC.gov...</div>
+      ):(
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {[
+              {l:'Commercials',v:latest.comm_net>0?'NET LONG':'NET SHORT',sub:`Net: ${latest.comm_net?.toLocaleString()}`,c:latest.comm_net>0?'text-emerald-400':'text-red-400'},
+              {l:'Large Specs',v:latest.large_net>0?'NET LONG':'NET SHORT',sub:`Net: ${latest.large_net?.toLocaleString()}`,c:latest.large_net>0?'text-emerald-400':'text-red-400'},
+              {l:'Week Change',v:weekChange!=null?(weekChange>0?'+':'')+weekChange.toLocaleString():'—',sub:'Commercial net delta',c:weekChange!=null&&weekChange>0?'text-emerald-400':'text-red-400'},
+              {l:'Open Interest',v:latest.oi?.toLocaleString()??'—',sub:`As of ${latest.date}`,c:'text-zinc-300'},
+            ].map(c=>(
+              <div key={c.l} className="bg-zinc-900 border border-zinc-800 rounded-xl p-3">
+                <p className="text-xs text-zinc-500 mb-1">{c.l}</p>
+                <p className={cx('font-mono text-sm font-medium',c.c)}>{c.v}</p>
+                <p className="text-xs text-zinc-600 mt-0.5">{c.sub}</p>
               </div>
             ))}
-            {result.count>0&&<button onClick={()=>{onSaved();onClose();}} className="w-full mt-3 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs py-1.5 rounded-lg">View setups</button>}
           </div>
-        )}
-      </div>
+          <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
+            <p className="text-xs text-zinc-500 mb-3 uppercase tracking-wider">COT History — {sym}</p>
+            <div className="space-y-1">
+              {cot.slice(0,12).map((r,i)=>(
+                <div key={i} className="flex justify-between text-xs py-1.5 border-b border-zinc-800/40 last:border-0">
+                  <span className="text-zinc-600 font-mono">{r.date}</span>
+                  <span className={cx('font-mono',r.comm_net>0?'text-emerald-400':'text-red-400')}>Comm {r.comm_net>0?'+':''}{r.comm_net?.toLocaleString()}</span>
+                  <span className={cx('font-mono',r.large_net>0?'text-emerald-400':'text-red-400')}>Large {r.large_net>0?'+':''}{r.large_net?.toLocaleString()}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
-// ── MMXM TAB ──────────────────────────────────────────────────────
-function MMXMTab(){
-  const [biases,setBiases]=useState<{id:string;week_start:string;symbol:string;bias:string;amd_phase:string;htf_draw:string;notes:string}[]>([]);
-  const [cw,setCw]=useState('');
-  const [form,setForm]=useState({symbol:'NQ',bias:'bullish',amd_phase:'accumulation',htf_draw:'',notes:''});
-  const [saving,setSaving]=useState(false);
-  const inp="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-2 py-1.5 text-xs text-zinc-200 focus:outline-none focus:border-zinc-500";
-  useEffect(()=>{fetch('/api/weekbias').then(r=>r.json()).then(d=>{setBiases(d.biases??[]);setCw(d.currentWeek??'');});},[]);
-  const save=async()=>{setSaving(true);await fetch('/api/weekbias',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...form,week_start:cw})});const r=await fetch('/api/weekbias');const d=await r.json();setBiases(d.biases??[]);setSaving(false);};
-  const phases=['accumulation','manipulation','distribution','reaccumulation','redistribution'];
-  const pbtn=(a:boolean,color='')=>`text-xs px-2.5 py-1 rounded-lg border transition-colors ${a?color||'border-zinc-500 bg-zinc-700 text-zinc-200':'border-zinc-800 text-zinc-600 hover:border-zinc-700'}`;
-  return(
-    <div className="flex flex-col gap-4 overflow-y-auto h-full pb-6">
-      <div className="grid grid-cols-3 gap-4">
-        {[['Accumulation','Asia session. Range builds. Liquidity stacks above and below. Smart money positions silently. No direction.','rgba(99,102,241,0.12)','rgba(99,102,241,0.4)'],['Manipulation','London open. Judas swing. Engineered move to sweep SSL or BSL. Traps retail. CISD follows.','rgba(245,158,11,0.12)','rgba(245,158,11,0.4)'],['Distribution','NY session. True delivery. Price moves to the opposing DOL from the manipulation sweep.','rgba(16,185,129,0.12)','rgba(16,185,129,0.4)']].map(([ph,desc,bg,border])=>(
-          <div key={ph} className="rounded-xl p-4" style={{background:bg,border:`0.5px solid ${border}`}}>
-            <div className="font-semibold mb-2 text-sm" style={{color:border}}>{ph}</div>
-            <div className="text-zinc-400 text-xs leading-relaxed">{desc}</div>
+// ── TRADES TAB ──
+function TradesTab() {
+  const [trades,setTrades] = useState<Trade[]>([]);
+  const [stats,setStats] = useState<{total:number;wins:number;losses:number;winRate:number;totalPnl:number;totalR:number;profitFactor:number}|null>(null);
+  const [showLog,setShowLog] = useState(false);
+  const [closing,setClosing] = useState<Trade|null>(null);
+  const [exitPrice,setExitPrice] = useState('');
+  const load = useCallback(async()=>{ const r=await fetch('/api/trades'); const d=await r.json(); setTrades(d.trades??[]); setStats(d.stats??null); },[]);
+  useEffect(()=>{ load(); },[load]);
+  const closeOut = async(t:Trade)=>{ await fetch('/api/trades',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:t.id,exit_price:parseFloat(exitPrice)})}); setClosing(null); setExitPrice(''); load(); };
+  const del = async(id:string)=>{ await fetch('/api/trades',{method:'DELETE',headers:{'Content-Type':'application/json'},body:JSON.stringify({id})}); load(); };
+  return (
+    <div className="space-y-4">
+      {stats&&stats.total>0&&(
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {[
+            {l:'Win Rate',v:`${stats.winRate}%`,c:stats.winRate>=50?'text-emerald-400':'text-red-400'},
+            {l:'Total R',v:`${stats.totalR>=0?'+':''}${stats.totalR}R`,c:stats.totalR>=0?'text-emerald-400':'text-red-400'},
+            {l:'Total P&L',v:`${stats.totalPnl>=0?'+':''}$${Math.abs(stats.totalPnl).toFixed(0)}`,c:stats.totalPnl>=0?'text-emerald-400':'text-red-400'},
+            {l:'Profit Factor',v:stats.profitFactor.toFixed(2),c:stats.profitFactor>=1.5?'text-emerald-400':'text-zinc-400'},
+          ].map(s=>(
+            <div key={s.l} className="bg-zinc-900 border border-zinc-800 rounded-xl p-3">
+              <p className="text-xs text-zinc-500">{s.l}</p>
+              <p className={cx('font-mono text-sm font-medium mt-1',s.c)}>{s.v}</p>
+            </div>
+          ))}
+        </div>
+      )}
+      <div className="flex justify-between items-center">
+        <span className="text-xs text-zinc-600">{trades.length} trades</span>
+        <button onClick={()=>setShowLog(true)} className="px-3 py-1.5 rounded-lg bg-zinc-800 border border-zinc-700 text-xs text-zinc-300 hover:border-zinc-500">+ Log Trade</button>
+      </div>
+      {trades.length===0?(
+        <div className="text-center py-16 space-y-2">
+          <div className="text-zinc-700 text-4xl">📋</div>
+          <p className="text-zinc-500 text-sm">No trades logged yet</p>
+          <p className="text-zinc-700 text-xs">Log trades manually or via the log button on any setup.</p>
+          <button onClick={()=>setShowLog(true)} className="mt-2 px-4 py-2 rounded-lg bg-zinc-800 border border-zinc-700 text-xs text-zinc-300 hover:border-zinc-500">Log your first trade</button>
+        </div>
+      ):(
+        <div className="space-y-2">
+          {trades.map(t=>(
+            <div key={t.id} className={cx('bg-zinc-900 border rounded-xl p-3',t.outcome==='win'?'border-emerald-900/50':t.outcome==='loss'?'border-red-900/50':t.outcome==='running'?'border-yellow-900/50':'border-zinc-800')}>
+              <div className="flex justify-between items-start">
+                <div className="flex items-center gap-2">
+                  <span className="font-mono text-sm text-white">{t.symbol}</span>
+                  <span className={cx('text-xs px-1.5 rounded font-mono',t.direction==='bull'?'bg-emerald-900/40 text-emerald-400':'bg-red-900/40 text-red-400')}>{t.direction==='bull'?'L':'S'}</span>
+                  <span className="text-xs text-zinc-600">{t.setup_type}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  {t.outcome&&<span className={cx('text-xs px-2 py-0.5 rounded font-mono',t.outcome==='win'?'bg-emerald-900/40 text-emerald-400':t.outcome==='loss'?'bg-red-900/40 text-red-400':t.outcome==='running'?'bg-yellow-900/40 text-yellow-400':'bg-zinc-800 text-zinc-500')}>{t.outcome.toUpperCase()}</span>}
+                  {t.outcome==='running'&&<button onClick={()=>setClosing(t)} className="text-xs text-zinc-600 hover:text-zinc-300">close</button>}
+                  <button onClick={()=>del(t.id)} className="text-zinc-700 hover:text-red-400 text-xs">x</button>
+                </div>
+              </div>
+              <div className="flex gap-4 mt-1.5 text-xs text-zinc-600 flex-wrap">
+                <span>Entry <span className="font-mono text-zinc-300">{t.entry_price}</span></span>
+                {t.exit_price&&<span>Exit <span className="font-mono text-zinc-300">{t.exit_price}</span></span>}
+                {t.pnl_r!=null&&<span className={cx('font-mono font-medium',t.pnl_r>=0?'text-emerald-400':'text-red-400')}>{t.pnl_r>=0?'+':''}{t.pnl_r}R</span>}
+                {t.pnl_dollars!=null&&<span className={cx('font-mono',t.pnl_dollars>=0?'text-emerald-400':'text-red-400')}>{t.pnl_dollars>=0?'+':''}{t.pnl_dollars.toFixed(0)}</span>}
+                {t.session&&<span className="text-zinc-700">{t.session}</span>}
+              </div>
+              {t.notes&&<p className="text-xs text-zinc-700 mt-1 italic">{t.notes}</p>}
+            </div>
+          ))}
+        </div>
+      )}
+      {showLog&&<TradeModal onClose={()=>setShowLog(false)} onSaved={load}/>}
+      {closing&&(
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5 w-72 space-y-3">
+            <p className="text-sm text-zinc-300">Close {closing.symbol} trade</p>
+            <input autoFocus className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm font-mono text-white focus:outline-none" placeholder="Exit price" value={exitPrice} onChange={e=>setExitPrice(e.target.value)}/>
+            <div className="flex gap-2">
+              <button onClick={()=>closeOut(closing)} className="flex-1 py-2 rounded-lg bg-zinc-700 hover:bg-zinc-600 text-sm text-white">Close Trade</button>
+              <button onClick={()=>setClosing(null)} className="px-3 py-2 rounded-lg bg-zinc-800 text-sm text-zinc-500">Cancel</button>
+            </div>
           </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── ANALYTICS TAB ──
+function AnalyticsTab() {
+  const [data,setData] = useState<{stats:Record<string,number>;bySession:Record<string,{wins:number;losses:number;pnl:number}>;bySymbol:Record<string,{wins:number;losses:number;pnl:number}>;equityCurve:{date:string;equity:number}[]}|null>(null);
+  useEffect(()=>{ fetch('/api/trades').then(r=>r.json()).then(d=>setData(d)); },[]);
+  if(!data||data.stats.total===0) return (
+    <div className="text-center py-20">
+      <p className="text-zinc-500 text-sm">No trade data yet</p>
+      <p className="text-zinc-700 text-xs mt-2">Log trades in the Trades tab — analytics builds automatically.</p>
+    </div>
+  );
+  const {stats,bySession,bySymbol,equityCurve} = data;
+  return (
+    <div className="space-y-5">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {[{l:'Trades',v:`${stats.wins}W / ${stats.losses}L`},{l:'Win Rate',v:`${stats.winRate}%`},{l:'Profit Factor',v:stats.profitFactor?.toFixed(2)??'—'},{l:'Total R',v:`${stats.totalR>=0?'+':''}${stats.totalR}R`}].map(s=>(
+          <div key={s.l} className="bg-zinc-900 border border-zinc-800 rounded-xl p-3"><p className="text-xs text-zinc-500">{s.l}</p><p className="font-mono text-sm text-white mt-1">{s.v}</p></div>
         ))}
       </div>
-      <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
-        <div className="text-zinc-500 text-xs uppercase tracking-wider mb-3">Weekly Bias Builder · {cw}</div>
-        <div className="flex flex-wrap gap-2 mb-3">
-          {(['NQ','ES'] as const).map(s=><button key={s} onClick={()=>setForm(p=>({...p,symbol:s}))} className={pbtn(form.symbol===s)}>{s}</button>)}
-          {[{v:'bullish',c:'border-emerald-600/50 bg-emerald-500/10 text-emerald-400'},{v:'bearish',c:'border-red-600/50 bg-red-500/10 text-red-400'},{v:'consolidation',c:'border-yellow-600/50 bg-yellow-500/10 text-yellow-400'}].map(({v,c})=><button key={v} onClick={()=>setForm(p=>({...p,bias:v}))} className={pbtn(form.bias===v,c)}>{v}</button>)}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
+          <p className="text-xs text-zinc-500 mb-3 uppercase tracking-wider">By Session</p>
+          {Object.entries(bySession).map(([s,v])=>(
+            <div key={s} className="flex justify-between py-1.5 border-b border-zinc-800/40 last:border-0 text-xs">
+              <span className="text-zinc-400">{s}</span><span className="text-zinc-600">{v.wins}W {v.losses}L</span>
+              <span className={cx('font-mono',v.pnl>=0?'text-emerald-400':'text-red-400')}>{v.pnl>=0?'+':''}{v.pnl.toFixed(0)}</span>
+            </div>
+          ))}
         </div>
-        <div className="text-zinc-600 text-xs mb-1.5">AMD Phase</div>
-        <div className="flex flex-wrap gap-1.5 mb-3">{phases.map(p=><button key={p} onClick={()=>setForm(f=>({...f,amd_phase:p}))} className={pbtn(form.amd_phase===p)}>{p}</button>)}</div>
-        <div className="grid grid-cols-2 gap-2 mb-3">
-          <div><label className="text-zinc-600 text-xs block mb-1">HTF Draw</label><input className={inp} value={form.htf_draw} onChange={e=>setForm(p=>({...p,htf_draw:e.target.value}))} placeholder="BSL at 30200"/></div>
-          <div><label className="text-zinc-600 text-xs block mb-1">Notes</label><input className={inp} value={form.notes} onChange={e=>setForm(p=>({...p,notes:e.target.value}))} placeholder="Weekly narrative..."/></div>
-        </div>
-        <button onClick={save} disabled={saving} className="bg-zinc-800 hover:bg-zinc-700 disabled:opacity-40 text-zinc-200 text-xs px-4 py-1.5 rounded-lg transition-colors">{saving?'Saving...':'Save Bias'}</button>
-      </div>
-      {biases.length>0&&<div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
-        <div className="text-zinc-500 text-xs uppercase tracking-wider mb-3">Bias History</div>
-        {biases.map(b=><div key={b.id} className="border-b border-zinc-800/60 py-2 last:border-0"><div className="flex justify-between text-xs mb-0.5"><span className="text-zinc-500">{b.week_start} · {b.symbol}</span><span className={b.bias==='bullish'?'text-emerald-400':b.bias==='bearish'?'text-red-400':'text-yellow-400'}>{b.bias?.toUpperCase()}</span></div><div className="text-zinc-500 text-xs">{b.amd_phase}{b.htf_draw?` · ${b.htf_draw}`:''}</div>{b.notes&&<div className="text-zinc-600 text-xs">{b.notes}</div>}</div>)}
-      </div>}
-      <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
-        <div className="text-zinc-500 text-xs uppercase tracking-wider mb-3">ICT Key Rules · From Your Videos</div>
-        <div className="grid grid-cols-2 gap-3">
-          {[['CISD','Full candle BODY close through prior swing. Wick = NOT CISD. Most common entry error.'],['Liquidity Sequence','SSL must be swept BEFORE going long. BSL swept BEFORE going short. Never buy into BSL.'],['Premium/Discount','Below 50% equilibrium = discount (longs only). Above 50% = premium (shorts only).'],['DOL First','Always find the Draw on Liquidity before the setup. No DOL = no trade.'],['Killzone','8:30–11am NY is the model. Noon–1pm is dead. Outside these = low probability.'],['Confluence','HTF bias + liquidity swept + CISD + PD array in zone + DOL clear. All 5 required.']].map(([t,d])=>(
-            <div key={t} className="border border-zinc-800 rounded-xl p-3">
-              <div className="text-zinc-200 text-xs font-semibold mb-1.5">{t}</div>
-              <div className="text-zinc-500 text-xs leading-relaxed">{d}</div>
+        <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
+          <p className="text-xs text-zinc-500 mb-3 uppercase tracking-wider">By Symbol</p>
+          {Object.entries(bySymbol).map(([s,v])=>(
+            <div key={s} className="flex justify-between py-1.5 border-b border-zinc-800/40 last:border-0 text-xs">
+              <span className="font-mono text-zinc-400">{s}</span><span className="text-zinc-600">{v.wins}W {v.losses}L</span>
+              <span className={cx('font-mono',v.pnl>=0?'text-emerald-400':'text-red-400')}>{v.pnl>=0?'+':''}{v.pnl.toFixed(0)}</span>
             </div>
           ))}
         </div>
       </div>
-    </div>
-  );
-}
-
-// ── ANALYTICS TAB ─────────────────────────────────────────────────
-function AnalyticsTab(){
-  const [runs,setRuns]=useState<BtRun[]>([]);
-  const [btf,setBtf]=useState({symbol:'BTC-USD',marketSection:'crypto'});
-  const [btR,setBtR]=useState(false),[btRes,setBtRes]=useState<BtRun|null>(null),[btErr,setBtErr]=useState('');
-  useEffect(()=>{fetch('/api/deepbacktest').then(r=>r.json()).then(d=>setRuns(d.results??[]));},[]);
-  const run=async()=>{setBtR(true);setBtRes(null);setBtErr('');try{const r=await fetch('/api/deepbacktest',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(btf)});const d=await r.json();if(d.error)setBtErr(d.error);else{setBtRes(d.run);setRuns(p=>[d.run,...p]);}}catch(e){setBtErr(String(e));}setBtR(false);};
-  const inp="bg-zinc-800 border border-zinc-700 rounded-lg px-2 py-1.5 text-xs text-zinc-200 focus:outline-none";
-  return(
-    <div className="flex flex-col gap-4 overflow-y-auto h-full pb-6">
-      <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
-        <div className="text-zinc-500 text-xs uppercase tracking-wider mb-3">Deep Backtest Engine · 10 Years · Real OHLCV Data</div>
-        <div className="flex gap-3 items-end mb-4">
-          <div><label className="text-zinc-600 text-xs block mb-1">Symbol (Yahoo format)</label><input className={inp+' w-32'} value={btf.symbol} onChange={e=>setBtf(p=>({...p,symbol:e.target.value}))} placeholder="BTC-USD"/></div>
-          <div><label className="text-zinc-600 text-xs block mb-1">Section</label><select className={inp} value={btf.marketSection} onChange={e=>setBtf(p=>({...p,marketSection:e.target.value}))}><option value="crypto">Crypto</option><option value="forex">Forex</option><option value="stocks">Stocks</option><option value="futures">Futures</option></select></div>
-          <button onClick={run} disabled={btR} className="bg-zinc-700 hover:bg-zinc-600 disabled:opacity-40 text-zinc-200 text-xs px-5 py-1.5 rounded-lg transition-colors">{btR?'Running 10 years...':'Run Backtest'}</button>
-        </div>
-        <div className="text-zinc-600 text-xs mb-3">Examples: BTC-USD · ETH-USD · EURUSD=X · GC=F (Gold) · ^GSPC (S&P 500) · SPY · AAPL</div>
-        {btErr&&<div className="text-red-400/70 text-xs bg-red-500/5 border border-red-500/15 rounded-xl p-3 mb-3">{btErr}</div>}
-        {btRes&&(
-          <div className="border border-zinc-800 rounded-xl p-4">
-            <div className="text-zinc-300 text-xs font-semibold mb-3">{btRes.symbol} · {btRes.from_date} → {btRes.to_date} · {btRes.total_signals} signals</div>
-            <div className="grid grid-cols-4 gap-2 text-xs mb-3">
-              {[['Win Rate',btRes.win_rate+'%',btRes.win_rate>=55?'text-emerald-400':'text-red-400'],['Avg R:R',btRes.avg_rr+'R','text-blue-400'],['Profit Factor',btRes.profit_factor,'text-yellow-400'],['Total P&L',btRes.total_pnl+'R',btRes.total_pnl>0?'text-emerald-400':'text-red-400']].map(([l,v,c])=>(
-                <div key={l as string} className="bg-zinc-800 rounded-lg p-2"><div className="text-zinc-500 mb-0.5">{l}</div><div className={c as string}>{v}</div></div>
-              ))}
-            </div>
-            <div className="flex flex-wrap gap-1.5">
-              {Object.entries(btRes.yearly_breakdown).sort(([a],[b])=>a.localeCompare(b)).map(([yr,s])=>{const wr=s.total>0?Math.round(s.wins/s.total*100):0;return <span key={yr} className={`text-xs px-2 py-0.5 rounded-lg ${wr>=55?'bg-emerald-500/10 text-emerald-400':'bg-red-500/10 text-red-400'}`}>{yr} {wr}% ({s.total})</span>;})}
-            </div>
+      {equityCurve.length>1&&(
+        <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
+          <p className="text-xs text-zinc-500 mb-3 uppercase tracking-wider">Equity Curve</p>
+          <div className="h-20 flex items-end gap-px">
+            {equityCurve.map((p,i)=>{
+              const min=Math.min(...equityCurve.map(x=>x.equity)), max=Math.max(...equityCurve.map(x=>x.equity));
+              const h=max===min?50:((p.equity-min)/(max-min))*100;
+              return <div key={i} className={cx('flex-1 rounded-sm min-h-px',p.equity>=(equityCurve[0]?.equity??0)?'bg-emerald-500/60':'bg-red-500/60')} style={{height:`${h}%`}}/>;
+            })}
           </div>
-        )}
-      </div>
-      {runs.length>0&&<div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
-        <div className="text-zinc-500 text-xs uppercase tracking-wider mb-3">Previous Runs</div>
-        <table className="w-full text-xs"><thead><tr className="text-zinc-600 border-b border-zinc-800"><th className="text-left py-1">Symbol</th><th className="text-right">Signals</th><th className="text-right">Win%</th><th className="text-right">PF</th><th className="text-right">Best Yr</th><th className="text-right">Date</th></tr></thead><tbody>
-          {runs.slice(0,10).map(r=><tr key={r.id} className="border-t border-zinc-800/50"><td className="py-1 text-zinc-300">{r.symbol}</td><td className="text-right text-zinc-500">{r.total_signals}</td><td className={`text-right ${r.win_rate>=55?'text-emerald-400':'text-red-400'}`}>{r.win_rate}%</td><td className="text-right text-blue-400">{r.profit_factor}</td><td className="text-right text-yellow-400">{r.best_year}</td><td className="text-right text-zinc-600">{r.from_date?.slice(0,4)+'–'+r.to_date?.slice(0,4)}</td></tr>)}
-        </tbody></table>
-      </div>}
-    </div>
-  );
-}
-
-// ── JOURNAL TAB ───────────────────────────────────────────────────
-function JournalTab(){
-  const [entries,setEntries]=useState<{id:string;date:string;title:string;content:string;emotion:string;result:string}[]>([]);
-  const [form,setForm]=useState({date:new Date().toISOString().slice(0,10),title:'',content:'',emotion:'neutral',result:'no trade'});
-  const [adding,setAdding]=useState(false),[saving,setSaving]=useState(false);
-  const inp="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-2 py-1.5 text-xs text-zinc-200 focus:outline-none focus:border-zinc-500";
-  useEffect(()=>{sb.from('journal').select('*').order('date',{ascending:false}).limit(50).then(({data})=>{if(data)setEntries(data as typeof entries);});},[]);
-  const save=async()=>{if(!form.title||!form.content)return;setSaving(true);const {data}=await sb.from('journal').insert(form).select();if(data){setEntries(p=>[data[0] as typeof entries[0],...p]);setAdding(false);setForm({date:new Date().toISOString().slice(0,10),title:'',content:'',emotion:'neutral',result:'no trade'});}setSaving(false);};
-  const eC=(e:string)=>e==='confident'?'text-emerald-400':e==='patient'?'text-blue-400':(e==='fomo'||e==='revenge'||e==='anxious')?'text-red-400':'text-zinc-400';
-  const rC=(r:string)=>r==='win'?'text-emerald-400':r==='loss'?'text-red-400':r==='be'?'text-yellow-400':'text-zinc-600';
-  return(
-    <div className="flex flex-col gap-3 h-full overflow-hidden">
-      <div className="flex justify-between items-center shrink-0"><span className="text-zinc-500 text-xs uppercase tracking-wider">Trading Journal</span><button onClick={()=>setAdding(true)} className="text-xs px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-lg transition-colors">+ Entry</button></div>
-      {adding&&<div className="bg-zinc-900 border border-zinc-700 rounded-xl p-4 shrink-0">
-        <div className="grid grid-cols-3 gap-2 mb-3">
-          <div><label className="text-zinc-600 text-xs block mb-1">Date</label><input type="date" className={inp} value={form.date} onChange={e=>setForm(p=>({...p,date:e.target.value}))}/></div>
-          <div><label className="text-zinc-600 text-xs block mb-1">Emotion</label><select className={inp} value={form.emotion} onChange={e=>setForm(p=>({...p,emotion:e.target.value}))}><option value="confident">Confident</option><option value="patient">Patient</option><option value="neutral">Neutral</option><option value="anxious">Anxious</option><option value="fomo">FOMO</option><option value="revenge">Revenge</option></select></div>
-          <div><label className="text-zinc-600 text-xs block mb-1">Result</label><select className={inp} value={form.result} onChange={e=>setForm(p=>({...p,result:e.target.value}))}><option value="win">Win</option><option value="loss">Loss</option><option value="be">BE</option><option value="no trade">No Trade</option></select></div>
         </div>
-        <div className="mb-2"><label className="text-zinc-600 text-xs block mb-1">Title / Setup taken</label><input className={inp} value={form.title} onChange={e=>setForm(p=>({...p,title:e.target.value}))}/></div>
-        <div className="mb-3"><label className="text-zinc-600 text-xs block mb-1">Notes</label><textarea className={inp+' resize-none'} rows={3} value={form.content} onChange={e=>setForm(p=>({...p,content:e.target.value}))}/></div>
-        <div className="flex gap-2"><button onClick={save} disabled={saving} className="flex-1 bg-zinc-700 hover:bg-zinc-600 disabled:opacity-40 text-zinc-200 text-xs py-1.5 rounded-lg">{saving?'Saving...':'Save'}</button><button onClick={()=>setAdding(false)} className="px-4 bg-zinc-800 text-zinc-500 text-xs rounded-lg">Cancel</button></div>
-      </div>}
-      <div className="overflow-y-auto flex-1 space-y-2 pb-4">
-        {entries.map(e=><div key={e.id} className="bg-zinc-900 border border-zinc-800 rounded-xl p-4"><div className="flex justify-between mb-2"><div><span className="text-zinc-200 text-xs font-semibold">{e.title}</span><span className="text-zinc-600 text-xs ml-2">{e.date}</span></div><div className="flex gap-2 text-xs"><span className={eC(e.emotion)}>{e.emotion}</span><span className={rC(e.result)}>{e.result?.toUpperCase()}</span></div></div><p className="text-zinc-400 text-xs leading-relaxed whitespace-pre-wrap">{e.content}</p></div>)}
-        {!entries.length&&!adding&&<div className="text-center py-16 text-zinc-700 text-sm">No entries yet</div>}
-      </div>
+      )}
     </div>
   );
 }
 
-// ── KNOWLEDGE TAB ──────────────────────────────────────────────────
-function KnowledgeTab(){
-  const [articles,setArticles]=useState<{id:string;title:string;content:string;category:string;source_episode:string;tags:string[];is_user_note:boolean}[]>([]);
-  const [search,setSearch]=useState('');
-  const [adding,setAdding]=useState(false);
-  const [form,setForm]=useState({title:'',content:'',category:'concept',tags:''});
-  const [saving,setSaving]=useState(false);
+// ── JOURNAL TAB ──
+function JournalTab() {
+  const [entries,setEntries] = useState<{id:string;date:string;title:string;content:string;emotion:string;result:string}[]>([]);
+  const [adding,setAdding] = useState(false);
+  const [form,setForm] = useState({date:new Date().toISOString().slice(0,10),title:'',content:'',emotion:'neutral',result:'no_trade'});
+  const [saving,setSaving] = useState(false);
+  useEffect(()=>{ sb.from('journal').select('*').order('date',{ascending:false}).then(({data})=>{ if(data) setEntries(data as typeof entries); }); },[]);
+  const save=async()=>{ setSaving(true); const {data}=await sb.from('journal').insert(form).select(); if(data) setEntries(p=>[data[0] as typeof entries[0],...p]); setAdding(false); setSaving(false); setForm({date:new Date().toISOString().slice(0,10),title:'',content:'',emotion:'neutral',result:'no_trade'}); };
   const inp="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-2 py-1.5 text-xs text-zinc-200 focus:outline-none";
-  useEffect(()=>{
-    const client = createClient(
-      'https://xavkbjbgmuasfkliptsh.supabase.co',
-      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhhdmtiamdtdWFzZmtsaXB0c2giLCJyb2xlIjoiYW5vbiIsImlhdCI6MTc0NjgxNTU5MiwiZXhwIjoyMDYyMzkxNTkyfQ.LMkYBBaSHNFUOm3ETy1N1PL60vVCj7kpORCBJ6mGf1M'
-    );
-    client.from('knowledge_base').select('*').order('source_episode').limit(100).then(({data,error})=>{
-      if(error) console.error('KB error:', error);
-      if(data) setArticles(data as typeof articles);
-    });
-  },[]);
-  const saveNote=async()=>{if(!form.title||!form.content)return;setSaving(true);const {data}=await sb.from('knowledge_base').insert({...form,tags:form.tags.split(',').map(t=>t.trim()).filter(Boolean),is_user_note:true,source_episode:'My Notes'}).select();if(data){setArticles(p=>[data[0] as typeof articles[0],...p]);setAdding(false);setForm({title:'',content:'',category:'concept',tags:''});}setSaving(false);};
-  const filtered=articles.filter(a=>!search||a.title?.toLowerCase().includes(search.toLowerCase())||a.content?.toLowerCase().includes(search.toLowerCase()));
-  return(
-    <div className="flex flex-col gap-3 h-full overflow-hidden">
-      <div className="flex gap-2 shrink-0">
-        <input placeholder="Search ICT concepts, rules, setups..." value={search} onChange={e=>setSearch(e.target.value)} className="flex-1 bg-zinc-900 border border-zinc-700 rounded-xl px-3 py-1.5 text-xs text-zinc-300 placeholder-zinc-600 focus:outline-none focus:border-zinc-500"/>
-        <button onClick={()=>setAdding(!adding)} className="text-xs px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-xl transition-colors">+ Note</button>
+  const emojiMap:Record<string,string>={confident:'💪',patient:'🧘',neutral:'😐',anxious:'😰',fomo:'😤',revenge:'😡'};
+  const resultMap:Record<string,string>={win:'🟢 Win',loss:'🔴 Loss',be:'⚪ BE',no_trade:'— No Trade'};
+  const set=(k:string)=>(e:React.ChangeEvent<HTMLInputElement|HTMLTextAreaElement|HTMLSelectElement>)=>setForm(p=>({...p,[k]:e.target.value}));
+  return (
+    <div className="space-y-4">
+      <div className="flex justify-between items-center">
+        <span className="text-xs text-zinc-600">{entries.length} sessions logged</span>
+        <button onClick={()=>setAdding(p=>!p)} className="px-3 py-1.5 rounded-lg bg-zinc-800 border border-zinc-700 text-xs text-zinc-300 hover:border-zinc-500">+ New Entry</button>
       </div>
-      {adding&&<div className="bg-zinc-900 border border-zinc-700 rounded-xl p-4 shrink-0">
-        <div className="grid grid-cols-3 gap-2 mb-3">
-          <div className="col-span-2"><label className="text-zinc-600 text-xs block mb-1">Title</label><input className={inp} value={form.title} onChange={e=>setForm(p=>({...p,title:e.target.value}))}/></div>
-          <div><label className="text-zinc-600 text-xs block mb-1">Category</label><select className={inp} value={form.category} onChange={e=>setForm(p=>({...p,category:e.target.value}))}><option value="concept">Concept</option><option value="setup">Setup</option><option value="rule">Rule</option><option value="mistake">Mistake</option></select></div>
+      {adding&&(
+        <div className="bg-zinc-900 border border-zinc-700 rounded-xl p-4 space-y-3">
+          <div className="grid grid-cols-2 gap-3">
+            <div><p className="text-xs text-zinc-500 mb-1">Date</p><input type="date" className={inp} value={form.date} onChange={set('date')}/></div>
+            <div><p className="text-xs text-zinc-500 mb-1">Result</p><select className={inp} value={form.result} onChange={set('result')}>{Object.entries(resultMap).map(([k,v])=><option key={k} value={k}>{v}</option>)}</select></div>
+          </div>
+          <div><p className="text-xs text-zinc-500 mb-1">Title</p><input className={inp} placeholder="e.g. London session — NQ setup" value={form.title} onChange={set('title')}/></div>
+          <div><p className="text-xs text-zinc-500 mb-1">Emotion</p>
+            <div className="flex gap-2 flex-wrap">{Object.entries(emojiMap).map(([k,v])=>(
+              <button key={k} onClick={()=>setForm(p=>({...p,emotion:k}))} className={cx('px-2 py-1 rounded-lg text-xs border transition-all',form.emotion===k?'bg-zinc-700 border-zinc-500 text-white':'border-zinc-800 text-zinc-600 hover:border-zinc-600')}>{v} {k}</button>
+            ))}</div>
+          </div>
+          <div><p className="text-xs text-zinc-500 mb-1">Notes</p><textarea className={cx(inp,'h-24 resize-none')} placeholder="What happened? What did you see? What did you do?" value={form.content} onChange={set('content')}/></div>
+          <div className="flex gap-2">
+            <button onClick={save} disabled={saving||!form.title} className="flex-1 py-2 rounded-lg bg-zinc-700 hover:bg-zinc-600 text-xs text-white disabled:opacity-40">{saving?'Saving...':'Save Entry'}</button>
+            <button onClick={()=>setAdding(false)} className="px-3 py-2 rounded-lg bg-zinc-800 text-xs text-zinc-500">Cancel</button>
+          </div>
         </div>
-        <div className="mb-3"><textarea className={inp+' resize-none'} rows={3} value={form.content} onChange={e=>setForm(p=>({...p,content:e.target.value}))} placeholder="Describe the concept..."/></div>
-        <div className="flex gap-2"><button onClick={saveNote} disabled={saving} className="flex-1 bg-zinc-700 hover:bg-zinc-600 disabled:opacity-40 text-zinc-200 text-xs py-1.5 rounded-lg">{saving?'Saving...':'Save'}</button><button onClick={()=>setAdding(false)} className="px-4 bg-zinc-800 text-zinc-500 text-xs rounded-lg">Cancel</button></div>
-      </div>}
-      <div className="text-zinc-600 text-xs shrink-0">{filtered.length} of {articles.length} articles</div>
-      <div className="overflow-y-auto flex-1">
-        <div className="grid grid-cols-2 gap-2 pb-4">
-          {filtered.map(a=><div key={a.id} className={`bg-zinc-900 border rounded-xl p-3 ${a.is_user_note?'border-blue-500/20':'border-zinc-800'}`}>
-            <div className="flex justify-between items-start mb-1.5"><span className="text-zinc-200 text-xs font-semibold">{a.title}</span><span className="text-zinc-600 text-xs ml-2 shrink-0">{a.source_episode}</span></div>
-            <span className="text-xs px-1.5 py-0.5 rounded-md bg-zinc-800 text-zinc-500">{a.category}</span>
-            <p className="text-zinc-400 text-xs mt-2 leading-relaxed">{a.content}</p>
-            {a.tags?.length>0&&<div className="flex gap-1 flex-wrap mt-2">{a.tags.map((t:string)=><span key={t} className="text-xs text-zinc-600 bg-zinc-800/80 px-1.5 py-0.5 rounded">{t}</span>)}</div>}
-          </div>)}
-          {!articles.length&&<div className="col-span-2 text-center text-zinc-700 py-12">Loading knowledge base...</div>}
+      )}
+      {entries.length===0&&!adding?(
+        <div className="text-center py-16"><p className="text-zinc-500 text-sm">No journal entries yet</p><p className="text-zinc-700 text-xs mt-1">Document your sessions — what you saw, what you did, how you felt.</p></div>
+      ):(
+        <div className="space-y-2">
+          {entries.map(e=>(
+            <div key={e.id} className="bg-zinc-900 border border-zinc-800 rounded-xl p-3">
+              <div className="flex justify-between items-start mb-1">
+                <div><span className="text-xs text-zinc-300 font-medium">{e.title}</span><span className="text-xs text-zinc-600 ml-2">{e.date}</span></div>
+                <div className="flex items-center gap-2"><span className="text-xs">{emojiMap[e.emotion]??'😐'}</span><span className="text-xs text-zinc-600">{resultMap[e.result]??e.result}</span></div>
+              </div>
+              {e.content&&<p className="text-xs text-zinc-600 leading-relaxed">{e.content}</p>}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── KNOWLEDGE TAB ──
+function KnowledgeTab() {
+  const [articles,setArticles] = useState<{id:string;title:string;content:string;category:string;source_episode:string;tags:string[];is_user_note:boolean}[]>([]);
+  const [search,setSearch] = useState('');
+  const [adding,setAdding] = useState(false);
+  const [form,setForm] = useState({title:'',content:'',tags:''});
+  const [saving,setSaving] = useState(false);
+  const [open,setOpen] = useState<string|null>(null);
+  useEffect(()=>{ sb.from('knowledge_base').select('*').order('source_episode').limit(200).then(({data,error})=>{ if(error) console.error('KB:',error); if(data) setArticles(data as typeof articles); }); },[]);
+  const save=async()=>{ setSaving(true); const {data}=await sb.from('knowledge_base').insert({...form,tags:form.tags.split(',').map(t=>t.trim()).filter(Boolean),is_user_note:true,source_episode:'My Notes',category:'note'}).select(); if(data) setArticles(p=>[data[0] as typeof articles[0],...p]); setAdding(false); setSaving(false); };
+  const filtered=articles.filter(a=>!search||a.title?.toLowerCase().includes(search.toLowerCase())||a.content?.toLowerCase().includes(search.toLowerCase()));
+  const inp="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-2 py-1.5 text-xs text-zinc-200 focus:outline-none";
+  const set=(k:string)=>(e:React.ChangeEvent<HTMLInputElement|HTMLTextAreaElement>)=>setForm(p=>({...p,[k]:e.target.value}));
+  const epColor=(ep:string)=>{
+    if(ep?.includes('2022')) return 'bg-blue-900/40 text-blue-400';
+    if(ep?.includes('2017')) return 'bg-amber-900/40 text-amber-400';
+    if(ep?.includes('Bonus')||ep?.includes('MMXM')) return 'bg-emerald-900/40 text-emerald-400';
+    if(ep==='My Notes') return 'bg-zinc-700 text-zinc-300';
+    return 'bg-zinc-800 text-zinc-500';
+  };
+  return (
+    <div className="space-y-4">
+      <div className="flex gap-2 items-center">
+        <input className="flex-1 bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-2 text-xs text-zinc-300 focus:outline-none focus:border-zinc-600 placeholder-zinc-700" placeholder="Search ICT concepts, episodes, setups..." value={search} onChange={e=>setSearch(e.target.value)}/>
+        <button onClick={()=>setAdding(p=>!p)} className="px-3 py-2 rounded-lg bg-zinc-800 border border-zinc-700 text-xs text-zinc-300 hover:border-zinc-500 whitespace-nowrap">+ Note</button>
+        <span className="text-xs text-zinc-700 whitespace-nowrap">{filtered.length}/{articles.length}</span>
+      </div>
+      {adding&&(
+        <div className="bg-zinc-900 border border-zinc-700 rounded-xl p-4 space-y-3">
+          <div><p className="text-xs text-zinc-500 mb-1">Title</p><input className={inp} value={form.title} onChange={set('title')}/></div>
+          <div><p className="text-xs text-zinc-500 mb-1">Content</p><textarea className={cx(inp,'h-20 resize-none')} value={form.content} onChange={set('content')}/></div>
+          <div><p className="text-xs text-zinc-500 mb-1">Tags (comma separated)</p><input className={inp} placeholder="e.g. FVG, discount, entry" value={form.tags} onChange={set('tags')}/></div>
+          <div className="flex gap-2">
+            <button onClick={save} disabled={saving||!form.title} className="flex-1 py-2 rounded-lg bg-zinc-700 hover:bg-zinc-600 text-xs text-white disabled:opacity-40">{saving?'Saving...':'Save Note'}</button>
+            <button onClick={()=>setAdding(false)} className="px-3 rounded-lg bg-zinc-800 text-xs text-zinc-500">Cancel</button>
+          </div>
+        </div>
+      )}
+      {!articles.length?(
+        <div className="text-center py-12 text-zinc-600 text-sm animate-pulse">Loading 40 ICT articles...</div>
+      ):(
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          {filtered.map(a=>(
+            <div key={a.id} className="bg-zinc-900 border border-zinc-800 rounded-xl p-3 cursor-pointer hover:border-zinc-700 transition-all" onClick={()=>setOpen(open===a.id?null:a.id)}>
+              <div className="flex justify-between items-start gap-2 mb-1">
+                <span className="text-xs text-zinc-300 font-medium leading-tight">{a.title}</span>
+                <span className={cx('text-xs px-1.5 py-0.5 rounded shrink-0 font-mono',epColor(a.source_episode))}>{a.source_episode}</span>
+              </div>
+              {a.tags?.length>0&&<div className="flex gap-1 flex-wrap mt-1">{a.tags.slice(0,4).map((t,i)=><span key={i} className="text-xs text-zinc-700 bg-zinc-800/50 px-1.5 rounded">{t}</span>)}</div>}
+              {open===a.id&&<p className="text-xs text-zinc-500 mt-2 leading-relaxed border-t border-zinc-800 pt-2">{a.content}</p>}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── TELEGRAM SETTINGS ──
+function TelegramSettings({ onClose }:{ onClose:()=>void }) {
+  const [cfg,setCfg] = useState({bot_token:'',chat_id:'',alert_sl:true,alert_entry:true,alert_tp:true,alert_scan:true});
+  const [saving,setSaving] = useState(false);
+  const [testing,setTesting] = useState(false);
+  const [msg,setMsg] = useState('');
+  useEffect(()=>{ fetch('/api/telegram').then(r=>r.json()).then(d=>{ if(d.config) setCfg(c=>({...c,...d.config})); }); },[]);
+  const save=async()=>{ setSaving(true); const r=await fetch('/api/telegram',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'save',...cfg})}); const d=await r.json(); setMsg(d.ok?'Saved!':d.error??'Error'); setSaving(false); };
+  const test=async()=>{ setTesting(true); const r=await fetch('/api/telegram',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'test',bot_token:cfg.bot_token,chat_id:cfg.chat_id})}); const d=await r.json(); setMsg(d.result?.ok?'Message sent to Telegram!':'Failed — check bot token and chat ID'); setTesting(false); };
+  const inp="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-2 py-1.5 text-xs text-zinc-200 focus:outline-none";
+  return (
+    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4" onClick={e=>e.target===e.currentTarget&&onClose()}>
+      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-sm p-5 space-y-4">
+        <div className="flex justify-between items-center">
+          <span className="text-sm font-mono text-zinc-300">Telegram Alerts</span>
+          <button onClick={onClose} className="text-zinc-600 hover:text-zinc-300">x</button>
+        </div>
+        <div className="text-xs text-zinc-600 leading-relaxed space-y-1 bg-zinc-800/40 rounded-lg p-3">
+          <p>1. Open Telegram, search <span className="text-zinc-400 font-mono">@BotFather</span></p>
+          <p>2. Send <span className="text-zinc-400 font-mono">/newbot</span> and get your token</p>
+          <p>3. Message your bot, then find your chat ID at <span className="text-zinc-400 font-mono">@userinfobot</span></p>
+        </div>
+        <div className="space-y-2">
+          <div><p className="text-xs text-zinc-500 mb-1">Bot Token</p><input className={inp} placeholder="110201543:AAHdqTcvCH1vGWJxfSeofSAs0K5PALDsaw" value={cfg.bot_token} onChange={e=>setCfg(p=>({...p,bot_token:e.target.value}))}/></div>
+          <div><p className="text-xs text-zinc-500 mb-1">Chat ID</p><input className={inp} placeholder="123456789" value={cfg.chat_id} onChange={e=>setCfg(p=>({...p,chat_id:e.target.value}))}/></div>
+        </div>
+        <div className="space-y-1.5">
+          {[['alert_sl','SL breached'],['alert_entry','Price in entry zone'],['alert_tp','Target hit'],['alert_scan','New setups found']].map(([k,l])=>(
+            <label key={k} className="flex items-center gap-2 cursor-pointer">
+              <input type="checkbox" className="accent-zinc-400" checked={cfg[k as keyof typeof cfg] as boolean} onChange={e=>setCfg(p=>({...p,[k]:e.target.checked}))}/>
+              <span className="text-xs text-zinc-400">{l}</span>
+            </label>
+          ))}
+        </div>
+        {msg&&<p className="text-xs text-zinc-400">{msg}</p>}
+        <div className="flex gap-2">
+          <button onClick={test} disabled={testing||!cfg.bot_token||!cfg.chat_id} className="px-3 py-2 rounded-lg bg-zinc-800 border border-zinc-700 text-xs text-zinc-300 disabled:opacity-40 hover:border-zinc-500">{testing?'Testing...':'Test'}</button>
+          <button onClick={save} disabled={saving} className="flex-1 py-2 rounded-lg bg-zinc-700 hover:bg-zinc-600 text-xs text-white disabled:opacity-40">{saving?'Saving...':'Save'}</button>
         </div>
       </div>
     </div>
   );
 }
 
-// ── MAIN APP ──────────────────────────────────────────────────────
-export default function App(){
-  const [tab,setTab]=useState<Tab>('Markets');
-  const [mktTab,setMktTab]=useState<MkTab>('Futures');
-  const [setups,setSetups]=useState<Setup[]>([]);
-  const [prices,setPrices]=useState<Prices>({NQ:null,ES:null,GC:null,DXY:null,VIX:null});
-  const [prev,setPrev]=useState<Prices>({NQ:null,ES:null,GC:null,DXY:null,VIX:null});
-  const [kz,setKz]=useState<KZ|null>(null);
-  const [calNews,setCalNews]=useState<CalEvent[]>([]);
-  const [chartSym,setChartSym]=useState('NQ');
-  const [chartTf,setChartTf]=useState('15m');
-  const [chartSetup,setChartSetup]=useState<Setup|null>(null);
-  const [showScan,setShowScan]=useState(false);
-  const [alerts,setAlerts]=useState<{id:string;msg:string;type:string}[]>([]);
-  const firedAlerts=useRef<Set<string>>(new Set());
+// ── MAIN APP ──
+export default function App() {
+  const [tab,setTab] = useState<Tab>('Markets');
+  const [mktTab,setMktTab] = useState<MkTab>('Futures');
+  const [setups,setSetups] = useState<Setup[]>([]);
+  const [prices,setPrices] = useState<Prices>({NQ:null,ES:null,GC:null,DXY:null,VIX:null});
+  const [kz,setKz] = useState<{nyTime:string;active:{name:string;short:string;color:string}|null}|null>(null);
+  const [calNews,setCalNews] = useState<{name:string;impact:string;isDangerZone:boolean}[]>([]);
+  const [showScan,setShowScan] = useState(false);
+  const [showTelegram,setShowTelegram] = useState(false);
+  const [selected,setSelected] = useState<Setup|null>(null);
+  const [showAnalysis,setShowAnalysis] = useState(false);
+  const [showTrade,setShowTrade] = useState(false);
+  const [tradingSetup,setTradingSetup] = useState<Setup|null>(null);
+  const [alerts,setAlerts] = useState<{id:string;msg:string;type:string}[]>([]);
+  const firedAlerts = useRef<Set<string>>(new Set());
 
-  const addAlert=useCallback((msg:string,type='y')=>{const id=Date.now().toString();setAlerts(p=>[...p.slice(-2),{id,msg,type}]);setTimeout(()=>setAlerts(p=>p.filter(a=>a.id!==id)),7000);},[]);
-  const loadSetups=useCallback(async()=>{const {data}=await sb.from('setups').select('*').in('status',['active','watching','triggered']).order('confluence_score',{ascending:false}).limit(60);if(data)setSetups(data as Setup[]);},[]);
-  const deleteSetup=useCallback(async(id:string)=>{await sb.from('setups').delete().eq('id',id);setSetups(p=>p.filter(s=>s.id!==id));},[]);
+  const addAlert = useCallback((msg:string,type='y')=>{
+    const id = Date.now().toString();
+    setAlerts(p=>[...p.slice(-2),{id,msg,type}]);
+    setTimeout(()=>setAlerts(p=>p.filter(a=>a.id!==id)),6000);
+  },[]);
 
-  useEffect(()=>{loadSetups();},[loadSetups]);
+  const loadSetups = useCallback(async()=>{
+    const {data} = await sb.from('setups').select('*').in('status',['active','watching','triggered']).order('confluence_score',{ascending:false}).limit(60);
+    if(data) setSetups(data as Setup[]);
+  },[]);
 
-  const loadPrices=useCallback(async()=>{try{const r=await fetch('/api/prices',{cache:'no-store'});const d=await r.json();if(d.prices){setPrices(cur=>{setPrev(cur);return d.prices;});}}catch{}},[]);
-  const loadKz=useCallback(async()=>{try{const r=await fetch('/api/killzone',{cache:'no-store'});const d=await r.json();setKz(d);}catch{}},[]);
-  const loadNews=useCallback(async()=>{try{const r=await fetch('/api/calendar',{cache:'no-store'});const d=await r.json();setCalNews(d.events??[]);}catch{}},[]);
+  const deleteSetup = useCallback(async(id:string)=>{
+    await sb.from('setups').delete().eq('id',id);
+    setSetups(p=>p.filter(s=>s.id!==id));
+    if(selected?.id===id){ setSelected(null); setShowAnalysis(false); }
+  },[selected]);
 
-  useEffect(()=>{loadPrices();loadKz();loadNews();const pi=setInterval(loadPrices,15000),ki=setInterval(loadKz,60000),ni=setInterval(loadNews,300000);return()=>{clearInterval(pi);clearInterval(ki);clearInterval(ni);};},[loadPrices,loadKz,loadNews]);
+  useEffect(()=>{ loadSetups(); },[loadSetups]);
+
+  const loadPrices = useCallback(async()=>{
+    try {
+      const r = await fetch('/api/prices',{cache:'no-store'});
+      const d = await r.json();
+      if(d.prices) setPrices(d.prices);
+    } catch {}
+  },[]);
+
+  const loadKz = useCallback(async()=>{
+    try { const r=await fetch('/api/killzone',{cache:'no-store'}); const d=await r.json(); setKz(d); } catch {}
+  },[]);
+
+  const loadNews = useCallback(async()=>{
+    try { const r=await fetch('/api/calendar',{cache:'no-store'}); const d=await r.json(); setCalNews(d.events??[]); } catch {}
+  },[]);
 
   useEffect(()=>{
-    if(!prices.NQ&&!prices.ES)return;
+    loadPrices(); loadKz(); loadNews();
+    const pi=setInterval(loadPrices,15000), ki=setInterval(loadKz,60000), ni=setInterval(loadNews,300000);
+    return()=>{ clearInterval(pi); clearInterval(ki); clearInterval(ni); };
+  },[loadPrices,loadKz,loadNews]);
+
+  // SL/Entry alerts (browser tab)
+  useEffect(()=>{
     setups.forEach(s=>{
-      if(!['active','watching'].includes(s.status))return;
-      if(s.expires_at&&new Date(s.expires_at)<new Date())return;
-      const p=prices[s.symbol as keyof Prices];if(!p)return;
-      const bull=s.direction==='bull'||s.direction==='long';
-      const slK=`sl-${s.id}`;if(!firedAlerts.current.has(slK)&&((bull&&p<s.stop_loss)||(!bull&&p>s.stop_loss))){firedAlerts.current.add(slK);addAlert(`SL hit — ${s.symbol} ${s.setup_type}`,'r');}
-      const eK=`e-${s.id}`;if(!firedAlerts.current.has(eK)&&p>=s.entry_low&&p<=s.entry_high){firedAlerts.current.add(eK);addAlert(`Entry zone — ${s.symbol} ${s.setup_type}`,'g');}
+      if(!['active','watching'].includes(s.status)) return;
+      if(s.expires_at&&new Date(s.expires_at)<new Date()) return;
+      const p = prices[s.symbol as keyof Prices];
+      if(!p) return;
+      const bull = s.direction==='bull'||s.direction==='long';
+      const slK = `sl-${s.id}`;
+      if(!firedAlerts.current.has(slK)&&((bull&&p<s.stop_loss)||(!bull&&p>s.stop_loss))){
+        firedAlerts.current.add(slK);
+        addAlert(`SL hit — ${s.symbol} ${s.setup_type}`,'r');
+      }
+      const eK = `e-${s.id}`;
+      if(!firedAlerts.current.has(eK)&&p>=s.entry_low&&p<=s.entry_high){
+        firedAlerts.current.add(eK);
+        addAlert(`Entry zone — ${s.symbol} ${s.setup_type}`,'g');
+      }
     });
   },[prices,setups,addAlert]);
 
-  const dangerNews=calNews.some(e=>e.isDangerZone);
-  const aStyle=(t:string)=>t==='r'?'border-red-500/30 bg-red-500/10 text-red-300':t==='g'?'border-emerald-500/30 bg-emerald-500/10 text-emerald-300':'border-zinc-600 bg-zinc-800 text-zinc-300';
+  const dangerNews = calNews.some(e=>e.isDangerZone);
+  const pFmt = (sym: keyof Prices, dec=1) => prices[sym]!=null ? prices[sym]!.toFixed(dec) : '—';
 
-  const handleChart=(s:Setup)=>{setChartSym(s.symbol.includes('BTC')||s.symbol.includes('ETH')?s.symbol.replace('-USD',''):s.symbol);setChartSetup(s);setTab('Chart');};
+  const TABS: Tab[] = ['Markets','Trades','Analytics','Journal','Knowledge'];
+  const MKT_TABS: MkTab[] = ['Futures','Crypto','Forex','Stocks','Institutional'];
 
-  return(
-    <div className="h-screen bg-zinc-950 text-zinc-100 font-mono text-sm flex flex-col overflow-hidden">
-      <div className="fixed top-11 right-3 z-50 flex flex-col gap-1.5 pointer-events-none">
-        {alerts.map(a=><div key={a.id} className={`text-xs px-3 py-1.5 rounded-xl border ${aStyle(a.type)}`}>{a.msg}</div>)}
+  return (
+    <div className="min-h-screen bg-zinc-950 text-zinc-200" style={{fontFamily:'ui-monospace,SFMono-Regular,monospace'}}>
+      {/* TOAST ALERTS */}
+      <div className="fixed top-4 right-4 z-50 space-y-2 pointer-events-none">
+        {alerts.map(a=>(
+          <div key={a.id} className={cx('px-3 py-2 rounded-xl text-xs border shadow-lg',
+            a.type==='r'?'bg-red-900/90 border-red-700 text-red-200':
+            a.type==='g'?'bg-emerald-900/90 border-emerald-700 text-emerald-200':
+            'bg-zinc-800/90 border-zinc-600 text-zinc-200')}>
+            {a.msg}
+          </div>
+        ))}
       </div>
 
-      <header className="border-b border-zinc-800 px-5 h-11 flex items-center justify-between shrink-0 bg-zinc-950/90 backdrop-blur">
-        <div className="flex items-center gap-3"><span className="text-white font-bold tracking-widest text-sm">VECTOR</span><span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span></div>
-        <div className="flex items-center gap-5 text-xs">
-          {dangerNews&&<span className="text-red-400 animate-pulse font-medium">⚠ NEWS</span>}
-          {kz?.active?<span className="px-2 py-0.5 rounded-lg font-medium text-xs" style={{color:kz.active.color,background:kz.active.color+'18'}}>{kz.active.short} · {kz.probability}</span>:<span className="text-zinc-600 text-xs">{kz?.upcoming[0]?`${kz.upcoming[0].short} ${kz.upcoming[0].minsAway}m`:'off hours'}</span>}
-          <div className="flex items-center gap-4">
-            {(['NQ','ES','GC','DXY','VIX'] as const).map(sym=>{const p=prices[sym],pp=prev[sym],up=p!==null&&pp!==null&&p>pp,dn=p!==null&&pp!==null&&p<pp;return <span key={sym} className={up?'text-emerald-400':dn?'text-red-400':'text-zinc-400'}>{sym} {p!==null?p.toFixed(sym==='VIX'?2:1):'—'}</span>;})}
-          </div>
-          <span className="text-zinc-600">NY {kz?.nyTime??''}</span>
+      {/* HEADER */}
+      <header className="border-b border-zinc-800/60 px-4 py-2 flex items-center justify-between sticky top-0 bg-zinc-950/95 backdrop-blur-sm z-40">
+        <div className="flex items-center gap-3">
+          <span className="text-sm font-bold tracking-widest text-white">VECTOR</span>
+          <div className={cx('w-1.5 h-1.5 rounded-full animate-pulse',prices.NQ?'bg-emerald-500':'bg-zinc-600')}/>
+          {kz&&<span className="text-xs hidden sm:block">
+            {kz.active
+              ? <span className={cx('font-medium',kz.active.color==='yellow'?'text-yellow-400':kz.active.color==='green'?'text-emerald-400':'text-blue-400')}>{kz.active.short}</span>
+              : <span className="text-zinc-600">OFF</span>}
+            <span className="text-zinc-700"> · {kz.nyTime}</span>
+          </span>}
+          {dangerNews&&<span className="text-xs text-red-400 animate-pulse hidden sm:block">NEWS</span>}
+        </div>
+        <div className="flex items-center gap-4 overflow-x-auto">
+          {(['NQ','ES','GC','DXY','VIX'] as const).map(s=>(
+            <span key={s} className="text-xs shrink-0 font-mono">
+              <span className="text-zinc-600">{s} </span>
+              <span className="text-zinc-300">{s==='DXY'?pFmt(s,3):s==='VIX'?pFmt(s,2):pFmt(s,1)}</span>
+            </span>
+          ))}
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          <button onClick={()=>setShowTelegram(true)} title="Telegram alerts" className="text-zinc-600 hover:text-zinc-300 text-lg leading-none">🔔</button>
+          <button onClick={()=>setShowScan(true)} className="px-3 py-1.5 rounded-lg bg-zinc-800 border border-zinc-700 text-xs text-zinc-300 hover:border-zinc-500">Scan</button>
         </div>
       </header>
 
-      <nav className="border-b border-zinc-800 px-5 flex items-center h-9 shrink-0 bg-zinc-950/90">
-        {TABS.map(t=><button key={t} onClick={()=>setTab(t)} className={`px-3 h-full text-xs border-b-2 transition-colors ${tab===t?'border-zinc-400 text-zinc-100':'border-transparent text-zinc-500 hover:text-zinc-300'}`}>{t}</button>)}
-        <div className="ml-auto flex gap-2">
-          <button onClick={()=>setShowScan(true)} className="text-xs px-3 py-1 rounded-lg border border-zinc-700 text-zinc-400 hover:text-zinc-200 hover:border-zinc-600 transition-colors">Scan</button>
-        </div>
+      {/* NAV */}
+      <nav className="border-b border-zinc-800/60 px-4 flex gap-0 overflow-x-auto">
+        {TABS.map(t=>(
+          <button key={t} onClick={()=>setTab(t)} className={cx('px-4 py-2.5 text-xs border-b-2 transition-all whitespace-nowrap',
+            tab===t?'border-zinc-400 text-zinc-200':'border-transparent text-zinc-600 hover:text-zinc-400')}>
+            {t}
+          </button>
+        ))}
       </nav>
 
-      {showScan&&<ScanModal prices={prices} kz={kz} onClose={()=>setShowScan(false)} onSaved={loadSetups}/>}
+      <main className="max-w-6xl mx-auto px-4 py-4">
 
-      <main className="flex-1 overflow-hidden p-4 min-h-0">
+        {/* MARKETS */}
         {tab==='Markets'&&(
-          <div className="flex flex-col h-full gap-0">
-            <div className="flex gap-1 mb-3 shrink-0">
-              {MKTABS.map(t=><button key={t} onClick={()=>setMktTab(t)} className={`px-4 py-1.5 text-xs rounded-lg mr-0.5 transition-colors ${mktTab===t?'bg-zinc-700 text-zinc-100':'text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/50'}`}>{t}</button>)}
-            </div>
-            <div className="flex-1 overflow-hidden min-h-0">
-              {mktTab==='Futures'&&<FuturesTab setups={setups} prices={prices} kz={kz} calNews={calNews} onChart={handleChart} onDelete={deleteSetup}/>}
-              {mktTab==='Crypto'&&<CryptoTab setups={setups} onChart={handleChart} onDelete={deleteSetup}/>}
-              {mktTab==='Forex'&&<ForexTab setups={setups} onChart={handleChart} onDelete={deleteSetup}/>}
-              {mktTab==='Stocks'&&<StocksTab setups={setups} onChart={handleChart} onDelete={deleteSetup}/>}
-              {mktTab==='Institutional'&&<InstitutionalTab/>}
-            </div>
-          </div>
-        )}
-
-        {tab==='Chart'&&(
-          <div className="flex flex-col gap-3 h-full">
-            <div className="flex gap-2 items-center shrink-0">
-              <div className="flex gap-1">{['NQ','ES','BTC','ETH','GC'].map(s=><button key={s} onClick={()=>{setChartSym(s);setChartSetup(null);}} className={`text-xs px-2.5 py-1 rounded-lg border transition-colors ${chartSym===s?'border-zinc-500 bg-zinc-700 text-zinc-100':'border-zinc-800 text-zinc-500 hover:border-zinc-700'}`}>{s}</button>)}</div>
-              <div className="flex gap-1">{['15m','1h','4h','D'].map(t=><button key={t} onClick={()=>setChartTf(t)} className={`text-xs px-2.5 py-1 rounded-lg border transition-colors ${chartTf===t?'border-zinc-500 bg-zinc-700 text-zinc-100':'border-zinc-800 text-zinc-500 hover:border-zinc-700'}`}>{t}</button>)}</div>
-              {chartSetup&&<div className="flex items-center gap-2 px-2.5 py-1 rounded-lg border border-zinc-700 text-xs ml-2"><span style={{color:dc(chartSetup.direction)}}>●</span><span className="text-zinc-300">{chartSetup.symbol} {chartSetup.setup_type}</span><button onClick={()=>setChartSetup(null)} className="text-zinc-600 hover:text-zinc-300 ml-1">×</button></div>}
-              <button onClick={()=>setShowScan(true)} className="ml-auto text-xs px-2.5 py-1 rounded-lg border border-zinc-800 text-zinc-500 hover:text-zinc-300 transition-colors">Scan</button>
-            </div>
-            {chartSetup&&<div className="flex gap-5 text-xs shrink-0 text-zinc-500"><span>Entry <span className="text-emerald-400/70">{chartSetup.entry_low?.toFixed(1)}–{chartSetup.entry_high?.toFixed(1)}</span></span><span>SL <span className="text-red-400/70">{chartSetup.stop_loss?.toFixed(1)}</span></span><span>TP <span className="text-blue-400/70">{chartSetup.target?.toFixed(1)}</span></span><span>{chartSetup.rr_ratio?.toFixed(1)}R · {chartSetup.cisd_confirmed?'CISD confirmed':'CISD pending'}</span></div>}
-            <div className="flex-1 bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden min-h-0"><CandleChart sym={chartSym} tf={chartTf} setup={chartSetup}/></div>
-            <div className="flex gap-2 flex-wrap shrink-0">
-              {setups.filter(s=>s.symbol===chartSym||s.symbol.includes(chartSym)).map(s=>(
-                <button key={s.id} onClick={()=>setChartSetup(s)} className={`text-xs px-2 py-1 rounded-lg border transition-colors ${chartSetup?.id===s.id?'border-zinc-500 bg-zinc-700 text-zinc-100':'border-zinc-800 text-zinc-500 hover:border-zinc-700'}`}>
-                  <span style={{color:dc(s.direction)}}>{s.direction}</span> {s.timeframe} {s.setup_type.slice(0,14)}
+          <div className="space-y-4">
+            <div className="flex gap-1 overflow-x-auto pb-1">
+              {MKT_TABS.map(t=>(
+                <button key={t} onClick={()=>setMktTab(t)} className={cx('px-3 py-1.5 rounded-lg text-xs border transition-all whitespace-nowrap',
+                  mktTab===t?'bg-zinc-800 border-zinc-600 text-white':'border-zinc-800 text-zinc-600 hover:border-zinc-700')}>
+                  {t}
                 </button>
               ))}
             </div>
+
+            {mktTab==='Futures'&&(
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-zinc-600 uppercase tracking-wider">Active Setups · {setups.length}</span>
+                  <button onClick={()=>setShowScan(true)} className="text-xs text-zinc-700 hover:text-zinc-400">+ scan</button>
+                </div>
+                {setups.length===0?(
+                  <div className="text-center py-20 space-y-3">
+                    <p className="text-zinc-600 text-sm">No setups — run a scan</p>
+                    <button onClick={()=>setShowScan(true)} className="px-4 py-2 rounded-lg bg-zinc-800 border border-zinc-700 text-xs text-zinc-400 hover:border-zinc-500">Scan Market</button>
+                  </div>
+                ):(
+                  <div className="space-y-2">
+                    {setups.map(s=>(
+                      <div key={s.id}>
+                        <SetupCard
+                          s={s} prices={prices}
+                          onDelete={deleteSetup}
+                          onAnalyze={s=>{ setSelected(s); setShowAnalysis(true); }}
+                          onTrade={s=>{ setTradingSetup(s); setShowTrade(true); }}
+                          selected={selected?.id===s.id}
+                          onSelect={s=>{ setSelected(s); setShowAnalysis(false); }}
+                        />
+                        {showAnalysis&&selected?.id===s.id&&(
+                          <AnalysisPanel setup={s} prices={prices} onClose={()=>setShowAnalysis(false)}/>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+            {mktTab==='Crypto'&&<CryptoTab/>}
+            {mktTab==='Forex'&&<ForexTab/>}
+            {mktTab==='Stocks'&&<StocksTab/>}
+            {mktTab==='Institutional'&&<InstitutionalTab/>}
           </div>
         )}
 
-        {tab==='MMXM'&&<MMXMTab/>}
+        {tab==='Trades'&&<TradesTab/>}
         {tab==='Analytics'&&<AnalyticsTab/>}
         {tab==='Journal'&&<JournalTab/>}
         {tab==='Knowledge'&&<KnowledgeTab/>}
       </main>
+
+      {showScan&&<ScanModal prices={prices} onClose={()=>setShowScan(false)} onDone={()=>{ setShowScan(false); loadSetups(); }}/>}
+      {showTelegram&&<TelegramSettings onClose={()=>setShowTelegram(false)}/>}
+      {showTrade&&<TradeModal setup={tradingSetup} onClose={()=>{ setShowTrade(false); setTradingSetup(null); }} onSaved={()=>{}}/>}
     </div>
   );
 }
