@@ -1,71 +1,75 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 export const dynamic = 'force-dynamic';
-const supabase = createClient((process.env.NEXT_PUBLIC_SUPABASE_URL ?? 'https://xavkbjbgmuasfkliptsh.supabase.co'), (process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhhdmtiamdtdWFzZmtsaXB0c2giLCJyb2xlIjoiYW5vbiIsImlhdCI6MTc0NjgxNTU5MiwiZXhwIjoyMDYyMzkxNTkyfQ.LMkYBBaSHNFUOm3ETy1N1PL60vVCj7kpORCBJ6mGf1M'));
-
+const sb = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL ?? 'https://xavkbjbgmuasfkliptsh.supabase.co',
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhhdmtiamdtdWFzZmtsaXB0c2giLCJyb2xlIjoiYW5vbiIsImlhdCI6MTc0NjgxNTU5MiwiZXhwIjoyMDYyMzkxNTkyfQ.LMkYBBaSHNFUOm3ETy1N1PL60vVCj7kpORCBJ6mGf1M'
+);
 export async function GET() {
-  const { data: trades } = await supabase.from('trades').select('*').order('opened_at', { ascending: true });
-  if (!trades || !trades.length) return NextResponse.json({ stats: null, trades: [] });
-
-  const ptVal = (t: {symbol:string}) => t.symbol === 'NQ' ? 20 : 50;
-  const pnl = (t: {result:string,entry_price:number,take_profit:number,stop_loss:number,symbol:string,pnl?:number}) => {
-    if (t.pnl) return t.pnl;
-    return t.result === 'win' ? Math.abs(t.take_profit - t.entry_price)*ptVal(t) : -Math.abs(t.entry_price - t.stop_loss)*ptVal(t);
-  };
-
-  const wins = trades.filter(t=>t.result==='win');
-  const losses = trades.filter(t=>t.result==='loss');
-  const totalPnl = trades.reduce((a,t)=>a+pnl(t),0);
-  const winRate = trades.length ? wins.length/trades.length : 0;
-  const avgWin = wins.length ? wins.reduce((a,t)=>a+pnl(t),0)/wins.length : 0;
-  const avgLoss = losses.length ? losses.reduce((a,t)=>a+Math.abs(pnl(t)),0)/losses.length : 0;
-  const profitFactor = avgLoss > 0 ? (wins.length*avgWin)/(losses.length*avgLoss) : 0;
-  const expectancy = totalPnl / trades.length;
-
+  const { data: trades } = await sb.from('trade_log').select('*').order('entry_time', { ascending: true });
+  if (!trades || trades.length === 0) return NextResponse.json({ trades: [], stats: null });
+  const closed = trades.filter(t => t.result && t.result !== 'open');
+  const wins = closed.filter(t => t.result === 'win');
+  const losses = closed.filter(t => t.result === 'loss');
+  const totalR = closed.reduce((a,t) => a + (t.r_multiple ?? 0), 0);
+  const grossWin = wins.reduce((a,t) => a + (t.r_multiple ?? 0), 0);
+  const grossLoss = Math.abs(losses.reduce((a,t) => a + (t.r_multiple ?? 0), 0));
+  // By setup type
+  const byType: Record<string,{wins:number;losses:number;totalR:number}> = {};
+  closed.forEach(t => {
+    const k = t.setup_type || 'Manual';
+    if (!byType[k]) byType[k] = { wins:0, losses:0, totalR:0 };
+    if (t.result==='win') byType[k].wins++;
+    else byType[k].losses++;
+    byType[k].totalR += t.r_multiple ?? 0;
+  });
   // By session
-  const sessions = ['London','NY','Silver Bullet','Asia'];
-  const bySession = sessions.map(s => {
-    const st = trades.filter(t=>t.session===s);
-    const wr = st.length ? st.filter(t=>t.result==='win').length/st.length : 0;
-    const p = st.reduce((a,t)=>a+pnl(t),0);
-    return { session: s, trades: st.length, winRate: +(wr*100).toFixed(1), pnl: +p.toFixed(0) };
-  }).filter(s=>s.trades>0);
-
-  // By day of week
-  const days = ['Monday','Tuesday','Wednesday','Thursday','Friday'];
-  const byDay = days.map(d => {
-    const dt = trades.filter(t=>t.day_of_week===d || new Date(t.opened_at).toLocaleDateString('en-US',{weekday:'long'})===d);
-    const wr = dt.length ? dt.filter(t=>t.result==='win').length/dt.length : 0;
-    return { day: d, trades: dt.length, winRate: +(wr*100).toFixed(1), pnl: +dt.reduce((a,t)=>a+pnl(t),0).toFixed(0) };
-  }).filter(d=>d.trades>0);
-
+  const bySess: Record<string,{wins:number;losses:number;totalR:number}> = {};
+  closed.forEach(t => {
+    const k = t.session || 'Unknown';
+    if (!bySess[k]) bySess[k] = { wins:0, losses:0, totalR:0 };
+    if (t.result==='win') bySess[k].wins++;
+    else bySess[k].losses++;
+    bySess[k].totalR += t.r_multiple ?? 0;
+  });
+  // By symbol
+  const bySym: Record<string,{wins:number;losses:number;totalR:number}> = {};
+  closed.forEach(t => {
+    const k = t.symbol || '?';
+    if (!bySym[k]) bySym[k] = { wins:0, losses:0, totalR:0 };
+    if (t.result==='win') bySym[k].wins++;
+    else bySym[k].losses++;
+    bySym[k].totalR += t.r_multiple ?? 0;
+  });
+  // By mistake
+  const mistakeCounts: Record<string,number> = {};
+  trades.forEach(t => {
+    (t.mistakes ?? []).forEach((m: string) => { mistakeCounts[m] = (mistakeCounts[m]??0)+1; });
+  });
   // Equity curve
   let equity = 0;
-  const equityCurve = trades.map(t => { equity += pnl(t); return { date: t.opened_at?.slice(0,10), equity: +equity.toFixed(0) }; });
-
-  // Max drawdown
-  let peak = 0, maxDD = 0; equity = 0;
-  for (const t of trades) {
-    equity += pnl(t);
-    if (equity > peak) peak = equity;
-    const dd = peak - equity;
-    if (dd > maxDD) maxDD = dd;
+  const curve = closed.map(t => { equity += t.r_multiple??0; return { date: t.entry_time?.slice(0,10)??'', r: +(t.r_multiple??0).toFixed(2), equity: +equity.toFixed(2) }; });
+  // Streaks
+  let curStreak = 0, maxWin = 0, maxLoss = 0;
+  let streak = 0;
+  for (const t of closed) {
+    if (t.result === 'win') { streak = streak > 0 ? streak+1 : 1; }
+    else { streak = streak < 0 ? streak-1 : -1; }
+    if (streak > maxWin) maxWin = streak;
+    if (streak < maxLoss) maxLoss = streak;
   }
-
-  // Consecutive
-  let maxConsecLoss = 0, curConsec = 0;
-  for (const t of trades) {
-    if (t.result !== 'win') { curConsec++; maxConsecLoss = Math.max(maxConsecLoss, curConsec); } else curConsec = 0;
-  }
-
+  curStreak = streak;
   return NextResponse.json({
+    trades,
     stats: {
-      totalTrades: trades.length, wins: wins.length, losses: losses.length,
-      winRate: +(winRate*100).toFixed(1), totalPnl: +totalPnl.toFixed(0),
-      avgWin: +avgWin.toFixed(0), avgLoss: +avgLoss.toFixed(0),
-      profitFactor: +profitFactor.toFixed(2), expectancy: +expectancy.toFixed(0),
-      maxDrawdown: +maxDD.toFixed(0), maxConsecLoss,
-    },
-    bySession, byDay, equityCurve, trades
+      total: closed.length, wins: wins.length, losses: losses.length,
+      winRate: closed.length ? +((wins.length/closed.length)*100).toFixed(1) : 0,
+      totalR: +totalR.toFixed(2),
+      avgWin: wins.length ? +(grossWin/wins.length).toFixed(2) : 0,
+      avgLoss: losses.length ? +(grossLoss/losses.length).toFixed(2) : 0,
+      profitFactor: grossLoss > 0 ? +(grossWin/grossLoss).toFixed(2) : grossWin > 0 ? 99 : 0,
+      currentStreak: curStreak, maxWinStreak: maxWin, maxLossStreak: Math.abs(maxLoss),
+      byType, bySess, bySym, mistakeCounts, curve
+    }
   });
 }
