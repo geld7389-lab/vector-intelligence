@@ -26,16 +26,20 @@ jobs:
           NEXT_PUBLIC_SUPABASE_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhhdmtiamdtdWFzZmtsaXB0c2giLCJyb2xlIjoiYW5vbiIsImlhdCI6MTc0NjgxNTU5MiwiZXBwIjoyMDYyMzkxNTkyfQ.LMkYBBaSHNFUOm3ETy1N1PL60vVCj7kpORCBJ6mGf1M
           GROQ_API_KEY: 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
 
-      - name: Deploy to Netlify
-        uses: nwtgck/actions-netlify@v3.0
-        with:
-          publish-dir: '.next'
-          production-deploy: true
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          deploy-message: "Deploy ${{ github.sha }}"
-          enable-pull-request-comment: false
-          enable-commit-comment: false
+      - name: Install Netlify CLI
+        run: npm i -g netlify-cli
+
+      - name: Create site if needed and deploy
+        run: |
+          # Create site if NETLIFY_SITE_ID not set
+          if [ -z "$NETLIFY_SITE_ID" ]; then
+            echo "Creating new Netlify site..."
+            SITE_INFO=$(netlify sites:create --name vector-intelligence-app --json 2>/dev/null || netlify sites:create --json)
+            SITE_ID=$(echo $SITE_INFO | python3 -c "import sys,json; d=json.loads(sys.stdin.read()); print(d.get('id',''))" 2>/dev/null)
+            echo "Created site ID: $SITE_ID"
+            export NETLIFY_SITE_ID=$SITE_ID
+          fi
+          netlify deploy --prod --dir=.next --message "Deploy $GITHUB_SHA"
         env:
           NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
           NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
-        timeout-minutes: 10
