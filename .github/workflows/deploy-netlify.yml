@@ -8,9 +8,6 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    outputs:
-      deploy_url: ${{ steps.deploy.outputs.deploy-url }}
-      site_id: ${{ steps.deploy.outputs.site-id }}
     steps:
       - uses: actions/checkout@v4
 
@@ -28,22 +25,38 @@ jobs:
           NEXT_PUBLIC_SUPABASE_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhhdmtiamdtdWFzZmtsaXB0c2giLCJyb2xlIjoiYW5vbiIsImlhdCI6MTc0NjgxNTU5MiwiZXBwIjoyMDYyMzkxNTkyfQ.LMkYBBaSHNFUOm3ETy1N1PL60vVCj7kpORCBJ6mGf1M
           GROQ_API_KEY: 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
 
-      - name: Deploy to Netlify
-        id: deploy
-        uses: nwtgck/actions-netlify@v3.0
-        with:
-          publish-dir: '.next'
-          production-deploy: true
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          deploy-message: "Deploy ${{ github.sha }}"
-          enable-pull-request-comment: false
-          enable-commit-comment: false
+      - name: Install Netlify CLI
+        run: npm i -g netlify-cli
+
+      - name: Deploy and capture URL
+        id: netlify
+        run: |
+          OUTPUT=$(netlify deploy --prod --dir=.next --json 2>&1)
+          echo "Raw output: $OUTPUT"
+          DEPLOY_URL=$(echo "$OUTPUT" | python3 -c "import sys,json; lines=sys.stdin.read(); data=json.loads(lines); print(data.get('deploy_url', data.get('url','')))" 2>/dev/null || echo "")
+          SITE_ID=$(echo "$OUTPUT" | python3 -c "import sys,json; lines=sys.stdin.read(); data=json.loads(lines); print(data.get('site_id',''))" 2>/dev/null || echo "")
+          echo "DEPLOY_URL=$DEPLOY_URL" >> $GITHUB_OUTPUT
+          echo "SITE_ID=$SITE_ID" >> $GITHUB_OUTPUT
+          echo "Deploy URL: $DEPLOY_URL"
+          echo "Site ID: $SITE_ID"
+          # Write URL to a file we can read
+          echo "$DEPLOY_URL" > /tmp/deploy_url.txt
+          echo "$SITE_ID" > /tmp/site_id.txt
         env:
           NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
           NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
 
-      - name: Print deploy URL
+      - name: Save URL to repo
         run: |
-          echo "DEPLOY_URL=${{ steps.deploy.outputs.deploy-url }}"
-          echo "SITE_ID=${{ steps.deploy.outputs.site-id }}"
-          echo "URL: ${{ steps.deploy.outputs.deploy-url }}" >> $GITHUB_STEP_SUMMARY
+          DEPLOY_URL="${{ steps.netlify.outputs.DEPLOY_URL }}"
+          SITE_ID="${{ steps.netlify.outputs.SITE_ID }}"
+          git config user.email "actions@github.com"
+          git config user.name "GitHub Actions"
+          echo "NETLIFY_URL=$DEPLOY_URL" > DEPLOY_INFO.txt
+          echo "SITE_ID=$SITE_ID" >> DEPLOY_INFO.txt
+          echo "DEPLOYED_AT=$(date)" >> DEPLOY_INFO.txt
+          git add DEPLOY_INFO.txt
+          git commit -m "deploy: save netlify URL [skip ci]" || echo "No changes"
+          git push || echo "Push failed"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
