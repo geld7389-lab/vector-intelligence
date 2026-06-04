@@ -1,0 +1,40 @@
+name: Get and Store Site ID
+
+on:
+  workflow_dispatch:
+
+jobs:
+  get_site_id:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GH_PAT }}
+
+      - run: npm i -g netlify-cli
+
+      - name: Get site ID and save
+        run: |
+          SITES=$(netlify api listSites 2>&1)
+          echo "$SITES" > /tmp/sites.json
+          SITE_ID=$(echo "$SITES" | python3 -c "
+import sys, json
+try:
+    data = json.load(sys.stdin)
+    for s in data:
+        if 'vector-intelligence-prod' in s.get('name',''):
+            print(s['id'])
+            break
+    else:
+        if data: print(data[0]['id'])
+except Exception as e:
+    print('ERR:', e)
+" 2>&1)
+          echo "SITE_ID=$SITE_ID"
+          echo "NETLIFY_SITE_ID=$SITE_ID" > SITE_INFO.txt
+          git config user.email "actions@github.com"
+          git config user.name "GitHub Actions"
+          git add SITE_INFO.txt
+          git diff --staged --quiet || (git commit -m "chore: save netlify site ID [skip ci]" && git push origin main)
+        env:
+          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
