@@ -1,0 +1,8 @@
+NAME: vector-intelligence-prod-605
+URL: https://vector-intelligence-prod-605.netlify.app
+NAME: vector-intelligence-prod
+URL: https://vector-intelligence-prod.netlify.app
+NAME: vector-intelligence-app-934
+URL: https://vector-intelligence-app-934.netlify.app
+NAME: vector-intelligence-app
+URL: https://vector-intelligence-app.netlify.app
