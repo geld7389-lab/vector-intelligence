@@ -11,7 +11,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.GH_PAT }}
 
       - uses: actions/setup-node@v4
         with:
@@ -30,36 +30,18 @@ jobs:
       - name: Install Netlify CLI
         run: npm i -g netlify-cli
 
-      - name: Create site and get ID
-        id: create_site
+      - name: Deploy
         run: |
-          SITE_ID="${{ secrets.NETLIFY_SITE_ID }}"
-          if [ -z "$SITE_ID" ]; then
-            echo "No site ID found, creating new site..."
-            SITE_JSON=$(netlify sites:create --name vector-intelligence-prod --json 2>&1 || netlify sites:create --json 2>&1)
-            echo "Create output: $SITE_JSON"
-            SITE_ID=$(echo "$SITE_JSON" | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
-            echo "New site ID: $SITE_ID"
-          else
-            echo "Using existing site ID: $SITE_ID"
-          fi
-          echo "SITE_ID=$SITE_ID" >> $GITHUB_OUTPUT
-          # Deploy to this site
-          RESULT=$(netlify deploy --prod --dir=.next --site="$SITE_ID" 2>&1)
-          echo "$RESULT"
-          URL=$(echo "$RESULT" | grep -oP 'https://[a-z0-9-]+\.netlify\.app' | head -1)
-          echo "DEPLOY_URL=$URL" >> $GITHUB_OUTPUT
-          echo "Site URL: $URL"
+          set +e
+          netlify deploy --prod --dir=.next 2>&1 | tee /tmp/deploy_out.txt
+          cat /tmp/deploy_out.txt > DEPLOY_INFO.txt
         env:
           NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+          NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
 
-      - name: Save deploy info
+      - name: Commit deploy info
         run: |
           git config user.email "actions@github.com"
           git config user.name "GitHub Actions"
-          echo "NETLIFY_URL=${{ steps.create_site.outputs.DEPLOY_URL }}" > DEPLOY_INFO.txt
-          echo "SITE_ID=${{ steps.create_site.outputs.SITE_ID }}" >> DEPLOY_INFO.txt
-          echo "DEPLOYED_AT=$(date -u)" >> DEPLOY_INFO.txt
           git add DEPLOY_INFO.txt
-          git diff --staged --quiet || git commit -m "deploy: update netlify info [skip ci]"
-          git push origin main || true
+          git diff --staged --quiet || (git commit -m "deploy: netlify output [skip ci]" && git push origin main)
