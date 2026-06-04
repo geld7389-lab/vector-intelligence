@@ -1,0 +1,24 @@
+name: Save Netlify URL
+
+on:
+  workflow_dispatch:
+
+jobs:
+  save:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GH_PAT }}
+
+      - name: Get site URL
+        run: |
+          SITES=$(curl -s -H "Authorization: Bearer $NETLIFY_AUTH_TOKEN" "https://api.netlify.com/api/v1/sites?filter=all&per_page=100")
+          echo "$SITES" | jq -r '.[] | select(.name | contains("vector-intelligence")) | "NAME: " + .name + "\nURL: " + .ssl_url' > NETLIFY_URL.txt
+          cat NETLIFY_URL.txt
+          git config user.email "actions@github.com"
+          git config user.name "GitHub Actions"
+          git add NETLIFY_URL.txt
+          git diff --staged --quiet || git commit -m "chore: save netlify URL [skip ci]" && git push origin main
+        env:
+          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
