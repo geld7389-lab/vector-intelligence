@@ -1,40 +1,35 @@
-name: Get and Store Site ID
+name: Save Netlify Site ID
 
 on:
+  push:
+    branches: [main]
   workflow_dispatch:
 
 jobs:
-  get_site_id:
+  save_id:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           token: ${{ secrets.GH_PAT }}
-
-      - run: npm i -g netlify-cli
-
-      - name: Get site ID and save
+      - name: Get site ID by name
         run: |
-          SITES=$(netlify api listSites 2>&1)
-          echo "$SITES" > /tmp/sites.json
-          SITE_ID=$(echo "$SITES" | python3 -c "
-import sys, json
+          RESPONSE=$(curl -s -H "Authorization: Bearer $NETLIFY_TOKEN" "https://api.netlify.com/api/v1/sites?filter=all")
+          SITE_ID=$(echo "$RESPONSE" | python3 -c "
+import sys,json
 try:
-    data = json.load(sys.stdin)
-    for s in data:
+    sites = json.load(sys.stdin)
+    for s in sites:
         if 'vector-intelligence-prod' in s.get('name',''):
             print(s['id'])
             break
-    else:
-        if data: print(data[0]['id'])
-except Exception as e:
-    print('ERR:', e)
-" 2>&1)
-          echo "SITE_ID=$SITE_ID"
-          echo "NETLIFY_SITE_ID=$SITE_ID" > SITE_INFO.txt
+except: pass
+" 2>/dev/null)
+          echo "Found Site ID: $SITE_ID"
+          echo "$SITE_ID" > SITE_INFO.txt
           git config user.email "actions@github.com"
           git config user.name "GitHub Actions"
           git add SITE_INFO.txt
-          git diff --staged --quiet || (git commit -m "chore: save netlify site ID [skip ci]" && git push origin main)
+          git diff --staged --quiet || (git commit -m "chore: save site ID [skip ci]" && git push origin main)
         env:
-          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+          NETLIFY_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
