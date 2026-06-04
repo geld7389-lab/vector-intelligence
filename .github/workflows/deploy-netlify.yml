@@ -30,18 +30,56 @@ jobs:
       - name: Install Netlify CLI
         run: npm i -g netlify-cli
 
-      - name: Deploy
+      - name: Get or create site ID
+        id: site
         run: |
-          set +e
-          netlify deploy --prod --dir=.next 2>&1 | tee /tmp/deploy_out.txt
-          cat /tmp/deploy_out.txt > DEPLOY_INFO.txt
+          # List all sites and get first one
+          SITES=$(netlify api listSites 2>&1)
+          echo "Sites: $SITES" | head -5
+          SITE_ID=$(echo "$SITES" | python3 -c "
+import sys, json
+try:
+    data = json.load(sys.stdin)
+    if isinstance(data, list) and data:
+        print(data[0]['id'])
+    else:
+        print('')
+except:
+    print('')
+" 2>/dev/null || echo "")
+          
+          if [ -z "$SITE_ID" ]; then
+            echo "Creating new site..."
+            CREATE=$(netlify sites:create --name vector-intelligence-prod-$(date +%s) 2>&1)
+            echo "Create: $CREATE"
+            SITE_ID=$(echo "$CREATE" | grep -oP '"id": "[^"]*"' | head -1 | grep -oP '"[^"]*"$' | tr -d '"')
+          fi
+          
+          echo "Site ID: $SITE_ID"
+          echo "SITE_ID=$SITE_ID" >> $GITHUB_OUTPUT
         env:
           NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
-          NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
 
-      - name: Commit deploy info
+      - name: Deploy to Netlify
+        id: deploy
+        uses: nwtgck/actions-netlify@v3.0
+        with:
+          publish-dir: '.next'
+          production-deploy: true
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          deploy-message: "Deploy ${{ github.sha }}"
+          enable-pull-request-comment: false
+          enable-commit-comment: false
+        env:
+          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+          NETLIFY_SITE_ID: ${{ steps.site.outputs.SITE_ID }}
+
+      - name: Save deploy info
         run: |
           git config user.email "actions@github.com"
           git config user.name "GitHub Actions"
+          echo "NETLIFY_SITE_ID=${{ steps.site.outputs.SITE_ID }}" > DEPLOY_INFO.txt
+          echo "DEPLOY_URL=${{ steps.deploy.outputs.deploy-url }}" >> DEPLOY_INFO.txt
+          echo "DEPLOYED_AT=$(date -u)" >> DEPLOY_INFO.txt
           git add DEPLOY_INFO.txt
-          git diff --staged --quiet || (git commit -m "deploy: netlify output [skip ci]" && git push origin main)
+          git diff --staged --quiet || (git commit -m "deploy: netlify site info [skip ci]" && git push origin main)
