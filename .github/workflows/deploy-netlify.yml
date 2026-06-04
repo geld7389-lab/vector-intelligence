@@ -10,6 +10,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - uses: actions/setup-node@v4
         with:
@@ -28,35 +30,36 @@ jobs:
       - name: Install Netlify CLI
         run: npm i -g netlify-cli
 
-      - name: Deploy and capture URL
-        id: netlify
+      - name: Create site and get ID
+        id: create_site
         run: |
-          OUTPUT=$(netlify deploy --prod --dir=.next --json 2>&1)
-          echo "Raw output: $OUTPUT"
-          DEPLOY_URL=$(echo "$OUTPUT" | python3 -c "import sys,json; lines=sys.stdin.read(); data=json.loads(lines); print(data.get('deploy_url', data.get('url','')))" 2>/dev/null || echo "")
-          SITE_ID=$(echo "$OUTPUT" | python3 -c "import sys,json; lines=sys.stdin.read(); data=json.loads(lines); print(data.get('site_id',''))" 2>/dev/null || echo "")
-          echo "DEPLOY_URL=$DEPLOY_URL" >> $GITHUB_OUTPUT
+          SITE_ID="${{ secrets.NETLIFY_SITE_ID }}"
+          if [ -z "$SITE_ID" ]; then
+            echo "No site ID found, creating new site..."
+            SITE_JSON=$(netlify sites:create --name vector-intelligence-prod --json 2>&1 || netlify sites:create --json 2>&1)
+            echo "Create output: $SITE_JSON"
+            SITE_ID=$(echo "$SITE_JSON" | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
+            echo "New site ID: $SITE_ID"
+          else
+            echo "Using existing site ID: $SITE_ID"
+          fi
           echo "SITE_ID=$SITE_ID" >> $GITHUB_OUTPUT
-          echo "Deploy URL: $DEPLOY_URL"
-          echo "Site ID: $SITE_ID"
-          # Write URL to a file we can read
-          echo "$DEPLOY_URL" > /tmp/deploy_url.txt
-          echo "$SITE_ID" > /tmp/site_id.txt
+          # Deploy to this site
+          RESULT=$(netlify deploy --prod --dir=.next --site="$SITE_ID" 2>&1)
+          echo "$RESULT"
+          URL=$(echo "$RESULT" | grep -oP 'https://[a-z0-9-]+\.netlify\.app' | head -1)
+          echo "DEPLOY_URL=$URL" >> $GITHUB_OUTPUT
+          echo "Site URL: $URL"
         env:
           NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
-          NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
 
-      - name: Save URL to repo
+      - name: Save deploy info
         run: |
-          DEPLOY_URL="${{ steps.netlify.outputs.DEPLOY_URL }}"
-          SITE_ID="${{ steps.netlify.outputs.SITE_ID }}"
           git config user.email "actions@github.com"
           git config user.name "GitHub Actions"
-          echo "NETLIFY_URL=$DEPLOY_URL" > DEPLOY_INFO.txt
-          echo "SITE_ID=$SITE_ID" >> DEPLOY_INFO.txt
-          echo "DEPLOYED_AT=$(date)" >> DEPLOY_INFO.txt
+          echo "NETLIFY_URL=${{ steps.create_site.outputs.DEPLOY_URL }}" > DEPLOY_INFO.txt
+          echo "SITE_ID=${{ steps.create_site.outputs.SITE_ID }}" >> DEPLOY_INFO.txt
+          echo "DEPLOYED_AT=$(date -u)" >> DEPLOY_INFO.txt
           git add DEPLOY_INFO.txt
-          git commit -m "deploy: save netlify URL [skip ci]" || echo "No changes"
-          git push || echo "Push failed"
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          git diff --staged --quiet || git commit -m "deploy: update netlify info [skip ci]"
+          git push origin main || true
