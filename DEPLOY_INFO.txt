@@ -1,0 +1,160 @@
+No project linked. Auto-creating a new project (team: geld7389-lab’s team)...
+Creating new site with random name
+[96m[1m​[22m[39m
+[96m[1mNetlify Build                                                 [22m[39m
+[96m[1m────────────────────────────────────────────────────────────────[22m[39m
+[36m[1m​[22m[39m
+[36m[1m❯ Version[22m[39m
+  @netlify/build 35.14.0
+[36m[1m​[22m[39m
+[36m[1m❯ Flags[22m[39m
+  deployId: 6a20e5dd9e64ab993fc4f953
+[36m[1m​[22m[39m
+[36m[1m❯ Current directory[22m[39m
+  /home/runner/work/vector-intelligence/vector-intelligence
+[36m[1m​[22m[39m
+[36m[1m❯ Config file[22m[39m
+  /home/runner/work/vector-intelligence/vector-intelligence/netlify.toml
+[36m[1m​[22m[39m
+[36m[1m❯ Context[22m[39m
+  production
+[36m[1m​[22m[39m
+[36m[1m❯ Using Next.js Runtime - v5.15.11[22m[39m
+[96m[1m​[22m[39m
+[96m[1mbuild.command from netlify.toml                               [22m[39m
+[96m[1m────────────────────────────────────────────────────────────────[22m[39m
+​
+[36m$ npm run build[39m
+
+> vector-intelligence@1.0.0 build
+> next build
+
+  ▲ Next.js 14.2.3
+  - Environments: .env.local
+
+   Creating an optimized production build ...
+ ✓ Compiled successfully
+   Linting and checking validity of types ...
+   Collecting page data ...
+   Generating static pages (0/7) ...
+   Generating static pages (1/7) 
+   Generating static pages (3/7) 
+   Generating static pages (5/7) 
+ ✓ Generating static pages (7/7)
+   Finalizing page optimization ...
+   Collecting build traces ...
+
+Route (app)                              Size     First Load JS
+┌ ○ /                                    72 kB           159 kB
+├ ○ /_not-found                          871 B          87.9 kB
+├ ƒ /api/analytics                       0 B                0 B
+├ ƒ /api/analyze                         0 B                0 B
+├ ƒ /api/autoscan                        0 B                0 B
+├ ƒ /api/backtest                        0 B                0 B
+├ ƒ /api/calendar                        0 B                0 B
+├ ƒ /api/candles                         0 B                0 B
+├ ƒ /api/cot                             0 B                0 B
+├ ƒ /api/crypto                          0 B                0 B
+├ ƒ /api/deepbacktest                    0 B                0 B
+├ ƒ /api/drawings                        0 B                0 B
+├ ƒ /api/forex                           0 B                0 B
+├ ƒ /api/health                          0 B                0 B
+├ ƒ /api/killzone                        0 B                0 B
+├ ƒ /api/knowledge                       0 B                0 B
+├ ƒ /api/market                          0 B                0 B
+├ ƒ /api/monitor                         0 B                0 B
+├ ƒ /api/news                            0 B                0 B
+├ ƒ /api/newsfeed                        0 B                0 B
+├ ƒ /api/prices                          0 B                0 B
+├ ƒ /api/scanner                         0 B                0 B
+├ ƒ /api/setups                          0 B                0 B
+├ ƒ /api/smt                             0 B                0 B
+├ ƒ /api/stocks                          0 B                0 B
+├ ƒ /api/telegram                        0 B                0 B
+├ ƒ /api/trades                          0 B                0 B
+├ ƒ /api/transcribe                      0 B                0 B
+├ ƒ /api/tv-webhook                      0 B                0 B
+└ ƒ /api/weekbias                        0 B                0 B
++ First Load JS shared by all            87 kB
+  ├ chunks/23-689eda8e83791f79.js        31.5 kB
+  ├ chunks/fd9d1056-23bdddb1df3a91c8.js  53.6 kB
+  └ other shared chunks (total)          1.92 kB
+
+
+○  (Static)   prerendered as static content
+ƒ  (Dynamic)  server-rendered on demand
+
+​
+[90m(build.command completed in 25.5s)[39m
+[96m[1m​[22m[39m
+[96m[1mFunctions bundling                                            [22m[39m
+[96m[1m────────────────────────────────────────────────────────────────[22m[39m
+​
+Packaging Functions from [36m.netlify/functions-internal[39m directory:
+ - ___netlify-server-handler/___netlify-server-handler.mjs
+​
+​
+[90m(Functions bundling completed in 1.8s)[39m
+[91m[1m​[22m[39m
+[91m[1mInternal error during "Uploading blobs"                       [22m[39m
+[91m[1m────────────────────────────────────────────────────────────────[22m[39m
+​
+  [31m[1mError message[22m[39m
+  MissingBlobsEnvironmentError: The environment has not been configured to use Netlify Blobs. To use it manually, supply the following properties when creating a store: siteID, token
+​
+  [31m[1mError location[22m[39m
+  During Uploading blobs
+      at getClientOptions (file:///opt/hostedtoolcache/node/20.20.2/x64/lib/node_modules/netlify-cli/node_modules/@netlify/blobs/dist/chunk-YAGWSQMB.js:329:11)
+      at getDeployStore (file:///opt/hostedtoolcache/node/20.20.2/x64/lib/node_modules/netlify-cli/node_modules/@netlify/blobs/dist/main.js:450:25)
+      at coreStep (file:///opt/hostedtoolcache/node/20.20.2/x64/lib/node_modules/netlify-cli/node_modules/@netlify/build/lib/plugins_core/blobs_upload/index.js:33:23)
+      at async fireCoreStep (file:///opt/hostedtoolcache/node/20.20.2/x64/lib/node_modules/netlify-cli/node_modules/@netlify/build/lib/steps/core_step.js:11:98)
+      at async tFireStep (file:///opt/hostedtoolcache/node/20.20.2/x64/lib/node_modules/netlify-cli/node_modules/@netlify/build/lib/time/main.js:19:63)
+      at async file:///opt/hostedtoolcache/node/20.20.2/x64/lib/node_modules/netlify-cli/node_modules/@netlify/build/lib/steps/run_step.js:65:329
+      at async pReduce.index (file:///opt/hostedtoolcache/node/20.20.2/x64/lib/node_modules/netlify-cli/node_modules/@netlify/build/lib/steps/run_steps.js:12:400)
+      at async Promise.all (index 0)
+      at async next (file:///opt/hostedtoolcache/node/20.20.2/x64/lib/node_modules/netlify-cli/node_modules/p-reduce/index.js:15:44)
+​
+  [31m[1mError properties[22m[39m
+  { name: [32m'MissingBlobsEnvironmentError'[39m }
+​
+  [31m[1mResolved config[22m[39m
+  build:
+    command: npm run build
+    commandOrigin: config
+    environment:
+      - NEXT_PUBLIC_SUPABASE_URL
+      - NEXT_PUBLIC_SUPABASE_ANON_KEY
+      - GROQ_API_KEY
+      - NODE_VERSION
+      - NPM_FLAGS
+    publish: /home/runner/work/vector-intelligence/vector-intelligence/.next
+    publishOrigin: config
+  functions:
+    "*":
+      node_bundler: esbuild
+  headers:
+    - for: /_next/static/*
+      values:
+        Cache-Control: public, max-age=31536000, immutable
+  headersOrigin: inline
+  plugins:
+    - inputs: {}
+      origin: config
+      package: "@netlify/plugin-nextjs"
+  redirects:
+    - from: /_next/image
+      query:
+        q: :quality
+        url: :url
+        w: :width
+      status: 200
+      to: /.netlify/images?url=:url&w=:width&q=:quality
+    - from: /_ipx/*
+      query:
+        q: :quality
+        url: :url
+        w: :width
+      status: 200
+      to: /.netlify/images?url=:url&w=:width&q=:quality
+  redirectsOrigin: inline
+ ›   Error: Error while running build
