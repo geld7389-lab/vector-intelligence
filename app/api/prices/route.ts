@@ -1,42 +1,31 @@
 import { NextResponse } from 'next/server';
-
 export const dynamic = 'force-dynamic';
-export const revalidate = 0;
 
-const SYMBOLS: Record<string, string> = {
-  NQ: 'NQ=F',
-  ES: 'ES=F',
-  GC: 'GC=F',
-  DXY: 'DX-Y.NYB',
-  VIX: '^VIX',
-};
-
-async function fetchPrice(symbol: string): Promise<number | null> {
+async function fetchPrice(sym: string): Promise<{price:number|null;change:number|null;changePct:number|null}> {
   try {
-    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1m&range=1d`;
-    const res = await fetch(url, {
-      headers: { 'User-Agent': 'Mozilla/5.0' },
-      next: { revalidate: 0 },
+    const r = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${sym}?interval=1d&range=2d`, {
+      headers:{ 'User-Agent':'Mozilla/5.0' }, cache:'no-store'
     });
-    if (!res.ok) return null;
-    const data = await res.json();
-    const meta = data?.chart?.result?.[0]?.meta;
-    return meta?.regularMarketPrice ?? meta?.previousClose ?? null;
-  } catch { return null; }
+    if (!r.ok) return { price:null, change:null, changePct:null };
+    const d = await r.json();
+    const meta = d?.chart?.result?.[0]?.meta;
+    const price = meta?.regularMarketPrice ?? null;
+    const prev = meta?.previousClose ?? meta?.chartPreviousClose ?? null;
+    const change = price && prev ? +(price - prev).toFixed(2) : null;
+    const changePct = price && prev ? +((price - prev) / prev * 100).toFixed(2) : null;
+    return { price, change, changePct };
+  } catch { return { price:null, change:null, changePct:null }; }
 }
 
 export async function GET() {
-  const [NQ, ES, GC, DXY, VIX] = await Promise.all([
-    fetchPrice(SYMBOLS.NQ),
-    fetchPrice(SYMBOLS.ES),
-    fetchPrice(SYMBOLS.GC),
-    fetchPrice(SYMBOLS.DXY),
-    fetchPrice(SYMBOLS.VIX),
+  const [nq,es,gc,dxy,vix] = await Promise.all([
+    fetchPrice('NQ=F'), fetchPrice('ES=F'), fetchPrice('GC=F'),
+    fetchPrice('DX=F'), fetchPrice('^VIX')
   ]);
-
-  const prices = { NQ, ES, GC, DXY, VIX };
-  return NextResponse.json(
-    { prices, timestamp: Date.now() },
-    { headers: { 'Cache-Control': 'no-store' } }
-  );
+  return NextResponse.json({
+    prices: {
+      NQ: nq.price, ES: es.price, GC: gc.price, DXY: dxy.price, VIX: vix.price,
+    },
+    changes: { NQ: nq, ES: es, GC: gc, DXY: dxy, VIX: vix }
+  });
 }
