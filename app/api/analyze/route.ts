@@ -7,88 +7,83 @@ const sb = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhhdmtiamdtdWFzZmtsaXB0c2giLCJyb2xlIjoiYW5vbiIsImlhdCI6MTc0NjgxNTU5MiwiZXhwIjoyMDYyMzkxNTkyfQ.LMkYBBaSHNFUOm3ETy1N1PL60vVCj7kpORCBJ6mGf1M'
 );
 
+const GROQ_API_KEY = process.env.GROQ_API_KEY ?? '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';
+
 export async function POST(req: NextRequest) {
   try {
-    const { setup, prices, market } = await req.json();
-    if (!setup) return NextResponse.json({ error: 'No setup' }, { status: 400 });
+    const { setup, prices } = await req.json();
 
-    const price = prices?.[setup.symbol] ?? null;
-    const isBull = setup.direction === 'bull' || setup.direction === 'long';
-    const slBreached = price !== null && (isBull ? price < setup.stop_loss : price > setup.stop_loss);
-    const isExpired = setup.expires_at && new Date(setup.expires_at) < new Date();
+    // 1. Pull ICT knowledge base context
+    const { data: kbRows } = await sb.from('knowledge_base').select('title,content').limit(12);
+    const kbContext = (kbRows ?? []).map((r: any) => `[${r.title}] ${r.content?.slice(0,220)}`).join('\n');
 
-    if (isExpired || slBreached) {
-      await sb.from('setups').update({ status: slBreached ? 'lost' : 'expired' }).eq('id', setup.id);
-      return NextResponse.json({ analysis: `INVALIDATED — ${slBreached ? `SL at ${setup.stop_loss} breached (now ${price?.toFixed(1)})` : 'setup expired'}.\n\nDo not trade this. Archive it.` });
-    }
-    if (price !== null && (isBull ? price >= setup.target : price <= setup.target)) {
-      await sb.from('setups').update({ status: 'won' }).eq('id', setup.id);
-      return NextResponse.json({ analysis: `TARGET HIT ✅ — ${setup.symbol} reached ${setup.target}.\n\nSetup closed as WIN. Log this trade in your journal.` });
-    }
-
-    // Fetch KB articles (most relevant by keyword match)
-    const { data: kb } = await sb.from('knowledge_base').select('title,content,source_episode,tags').limit(16);
-    const kbContext = (kb ?? []).map(a => `[${a.source_episode}] ${a.title}: ${a.content}`).join('\n\n');
-
-    // Fetch COT data for this symbol's market
-    const cotSymMap: Record<string,string> = { NQ:'NQ', ES:'ES', GC:'GC', CL:'CL', EURUSD:'EUR', GBPUSD:'GBP', BTC:'', ETH:'' };
-    const cotSym = cotSymMap[setup.symbol] ?? '';
+    // 2. Pull COT data for symbol
+    const cotSym = ['NQ','ES','EURUSD','GBPUSD','GC','CL'].includes(setup.symbol?.split('-')[0]) ? setup.symbol : null;
     let cotContext = '';
     if (cotSym) {
-      try {
-        const { data: cot } = await sb.from('cot_cache').select('*').eq('symbol', cotSym).order('date', { ascending: false }).limit(2);
-        if (cot && cot.length > 0) {
-          const latest = cot[0], prev = cot[1];
-          const weekChg = prev ? latest.comm_net - prev.comm_net : 0;
-          cotContext = `\nCOT POSITIONING (${cotSym} — as of ${latest.date}): Commercials ${latest.comm_net > 0 ? 'NET LONG' : 'NET SHORT'} ${Math.abs(latest.comm_net).toLocaleString()} | Week change: ${weekChg > 0 ? '+' : ''}${weekChg.toLocaleString()} | Large Specs: ${latest.large_net > 0 ? 'NET LONG' : 'NET SHORT'} ${Math.abs(latest.large_net).toLocaleString()}. ${latest.comm_net > 0 && isBull ? 'Commercials ALIGNED with bullish bias.' : latest.comm_net < 0 && !isBull ? 'Commercials ALIGNED with bearish bias.' : 'WARNING: COT positioning OPPOSES this trade direction.'}`;
-        }
-      } catch {}
+      const { data: cotRows } = await sb.from('cot_data').select('*').eq('symbol', cotSym.replace('USD','').replace('EURUSD','EUR').replace('GBPUSD','GBP')).order('report_date',{ascending:false}).limit(1);
+      if (cotRows && cotRows[0]) {
+        const c = cotRows[0];
+        const commAligned = (setup.direction==='bull'&&c.comm_net>0)||(setup.direction==='bear'&&c.comm_net<0);
+        cotContext = `\nCOT DATA (latest CFTC report): Commercials net ${c.comm_net>0?'+':''}${Math.round(c.comm_net/1000)}k | Large Specs net ${c.large_net>0?'+':''}${Math.round(c.large_net/1000)}k\nInstitutional alignment: ${commAligned?'✅ ALIGNED — Commercials confirm this direction':'⚠️ OPPOSED — Commercials are positioned against this trade'}\n`;
+      }
     }
 
-    // Fetch SMT signals for this symbol
+    // 3. Pull SMT signals (last 4 hours)
+    const { data: smtRows } = await sb.from('smt_signals').select('*').gte('detected_at', new Date(Date.now()-4*60*60*1000).toISOString()).order('detected_at',{ascending:false}).limit(3);
     let smtContext = '';
-    try {
-      const { data: smt } = await sb.from('smt_signals').select('*').order('detected_at', { ascending: false }).limit(3);
-      if (smt && smt.length > 0) {
-        const relevant = smt.filter(s => s.detected_at && new Date(s.detected_at) > new Date(Date.now() - 4*60*60*1000));
-        if (relevant.length > 0) smtContext = `\nSMT DIVERGENCE (last 4h): ${relevant.map(s => s.divergence_type + ' — ' + s.notes).join(' | ')}`;
-      }
-    } catch {}
+    if (smtRows && smtRows.length > 0) {
+      smtContext = `\nSMT DIVERGENCE (recent): ${smtRows.map((s:any)=>`${s.divergence_type} (NQ vs ES, ${new Date(s.detected_at).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})} NY)`).join('; ')}\n`;
+    }
 
-    const entry = ((setup.entry_low ?? 0) + (setup.entry_high ?? 0)) / 2;
-    const slPts = Math.abs(entry - setup.stop_loss).toFixed(1);
-    const tpPts = Math.abs(setup.target - entry).toFixed(1);
-    const priceLocation = price
-      ? price < setup.entry_low ? `Below entry zone — ${(setup.entry_low - price).toFixed(1)} pts away`
-        : price > setup.entry_high ? `Above entry zone — ${(price - setup.entry_high).toFixed(1)} pts away`
-        : `INSIDE entry zone (${price.toFixed(1)})`
-      : 'Unknown';
+    // 4. Pull weekly bias
+    const { data: biasRow } = await sb.from('weekly_bias').select('*').eq('symbol', setup.symbol).order('created_at',{ascending:false}).limit(1).single();
+    const biasContext = biasRow ? `\nWEEKLY BIAS: ${setup.symbol} ${biasRow.bias?.toUpperCase()} | Key levels: ${biasRow.key_levels ?? 'not set'} | Reasoning: ${biasRow.reasoning ?? ''}\n` : '';
 
-    const marketCtx = market === 'crypto' ? 'CRYPTO market. 24/7, no killzones, sweeps during low-volume windows.'
-      : market === 'forex' ? 'FOREX market. Key sessions: London (2-5am NY), NY (8:30-11am NY). DXY correlation critical.'
-      : market === 'stocks' ? 'STOCKS market. Only trade market hours. Earnings = binary risk.'
-      : 'FUTURES market (NQ/ES). Apply ICT killzone and session timing rules.';
+    // 5. Current prices context
+    const priceCtx = prices ? `\nCURRENT PRICES: NQ ${prices.NQ ?? '—'} | ES ${prices.ES ?? '—'} | GC ${prices.GC ?? '—'} | DXY ${prices.DXY ?? '—'}\n` : '';
 
-    const prompt = `You are an ICT/SMC analyst trained on this exact methodology:\n\n${kbContext}\n\n${marketCtx}${cotContext}${smtContext}\n\nSETUP:\nSymbol: ${setup.symbol} ${setup.timeframe} | Direction: ${setup.direction.toUpperCase()} | Type: ${setup.setup_type}\nEntry: ${setup.entry_low}–${setup.entry_high} | SL: ${setup.stop_loss} (${slPts}pts) | TP: ${setup.target} (${tpPts}pts)\nR:R: ${setup.rr_ratio} | HTF Bias: ${setup.htf_bias} | CISD: ${setup.cisd_confirmed ? 'CONFIRMED' : 'PENDING'}\nVolume: ${setup.volume_context} | DOL: ${setup.dol_target} | Score: ${setup.confluence_score}/100\nPrice now: ${price?.toFixed(1) ?? '—'} | Location: ${priceLocation}\n\nAnswer these 5 questions using the ICT methodology above:\n\n1. DOL VALID? Is ${setup.dol_target} still untapped and reachable?\n2. PRICE LOCATION? Discount or premium? Is this an optimal entry zone?\n3. CISD STATUS? ${setup.cisd_confirmed ? 'Confirmed — which PD array for entry?' : 'Not confirmed — what exact price action confirms it?'}\n4. INSTITUTIONAL CONTEXT? What do the COT and SMT signals say about institutional positioning?${!cotContext && !smtContext ? ' (No live data — reason from price structure only.)' : ''}\n5. VERDICT: WAIT / WATCH / READY — one sentence with exact trigger condition.`;
+    const prompt = `You are an expert ICT (Inner Circle Trader) trading analyst. Analyze this setup using Smart Money Concepts from ICT's methodology.
+${priceCtx}${cotContext}${smtContext}${biasContext}
+SETUP:
+Symbol: ${setup.symbol} | TF: ${setup.timeframe} | Direction: ${setup.direction?.toUpperCase()} | Type: ${setup.setup_type}
+Entry zone: ${setup.entry_low}–${setup.entry_high} | SL: ${setup.stop_loss} | TP: ${setup.target} | RR: ${setup.rr_ratio}R
+Confluence score: ${setup.confluence_score}/100 | HTF bias: ${setup.htf_bias}
+CISD confirmed: ${setup.cisd_confirmed ? 'YES' : 'No'} | Volume: ${setup.volume_context}
+${setup.bos_level ? `BOS level: ${setup.bos_level}` : ''} ${setup.choch_level ? `| CHoCH level: ${setup.choch_level}` : ''}
+Draw on Liquidity: ${setup.dol_target}
 
-    const apiKey = process.env.GROQ_API_KEY ?? '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';
+ICT KNOWLEDGE CONTEXT:
+${kbContext}
+
+Provide a concise analysis (200–280 words) covering:
+1. ALIGNMENT — does HTF bias, COT, and SMT all confirm this trade direction?
+2. SETUP QUALITY — is the PD array valid? Is CISD real? Is price in the right zone (discount for longs, premium for shorts)?
+3. EXECUTION — when to enter, what to watch for confirmation
+4. RISK — what invalidates this setup, key levels to watch
+5. VERDICT — Take it / Wait / Skip, with 1-line reason
+
+Be direct and specific. Use ICT terminology.`;
+
     const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-      body: JSON.stringify({
-        model: 'llama-3.3-70b-versatile',
-        max_tokens: 800,
-        temperature: 0.3,
-        messages: [
-          { role: 'system', content: 'You are an expert ICT/SMC trading analyst. Be direct, specific, concise. Reference ICT concepts exactly. Format with numbered answers.' },
-          { role: 'user', content: prompt }
-        ]
-      })
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${GROQ_API_KEY}` },
+      body: JSON.stringify({ model: 'llama-3.3-70b-versatile', max_tokens: 900, temperature: 0.4, messages: [{ role:'user', content: prompt }] })
     });
+
+    if (!res.ok) {
+      const err = await res.text();
+      return NextResponse.json({ error: `Groq error: ${err}` }, { status: 500 });
+    }
+
     const data = await res.json();
-    const text = data.choices?.[0]?.message?.content ?? data.error?.message ?? 'No response';
-    return NextResponse.json({ analysis: text });
+    const analysis = data.choices?.[0]?.message?.content ?? 'No analysis returned';
+
+    // Cache the analysis on the setup
+    await sb.from('setups').update({ ai_analysis: analysis }).eq('id', setup.id);
+
+    return NextResponse.json({ analysis });
   } catch (err) {
-    return NextResponse.json({ error: err instanceof Error ? err.message : String(err) }, { status: 500 });
+    return NextResponse.json({ error: err instanceof Error ? err.message : String(err) }, { status:500 });
   }
 }
