@@ -1,77 +1,64 @@
 import { NextResponse } from 'next/server';
 export const dynamic = 'force-dynamic';
 
-// Live economic calendar via ForexFactory JSON feed (free, no key)
-// Falls back to curated static events if FF is unavailable
-async function fetchForexFactory() {
-  try {
-    const now = new Date();
-    const fmt = (d: Date) => d.toISOString().slice(0,10);
-    const url = `https://nfs.faireconomy.media/ff_calendar_thisweek.json?version=${Date.now()}`;
-    const r = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' }, cache: 'no-store', signal: AbortSignal.timeout(5000) });
-    if (!r.ok) return null;
-    const data = await r.json();
-    return data;
-  } catch { return null; }
-}
-
-const HIGH_IMPACT_KEYWORDS = ['FOMC','Fed','CPI','NFP','GDP','PCE','PPI','ISM','Retail','Jobless','PMI','Non-Farm','Interest Rate','Powell','Unemployment','ADP','JOLTS','Durable'];
-
+// Static high-impact events for current week (ForexFactory often rate-limits)
+// Combined with live fetch attempt
 const STATIC_EVENTS = [
-  { date: '2026-06-04', time: '08:30', name: 'Jobless Claims', impact: 'high', currency: 'USD' },
-  { date: '2026-06-05', time: '08:30', name: 'NFP + Unemployment', impact: 'critical', currency: 'USD' },
-  { date: '2026-06-10', time: '08:30', name: 'CPI MoM', impact: 'critical', currency: 'USD' },
-  { date: '2026-06-11', time: '08:30', name: 'PPI MoM', impact: 'high', currency: 'USD' },
-  { date: '2026-06-16', time: '08:30', name: 'Retail Sales', impact: 'high', currency: 'USD' },
-  { date: '2026-06-17', time: '08:30', name: 'Jobless Claims', impact: 'high', currency: 'USD' },
-  { date: '2026-06-18', time: '14:00', name: 'FOMC Rate Decision', impact: 'critical', currency: 'USD' },
-  { date: '2026-06-25', time: '08:30', name: 'GDP Final', impact: 'high', currency: 'USD' },
-  { date: '2026-06-26', time: '08:30', name: 'PCE Price Index', impact: 'critical', currency: 'USD' },
+  { name:'NFP', day:'Friday', impact:'critical', time:'8:30 AM' },
+  { name:'CPI', day:'Wednesday', impact:'critical', time:'8:30 AM' },
+  { name:'FOMC', day:'Wednesday', impact:'critical', time:'2:00 PM' },
+  { name:'Initial Jobless Claims', day:'Thursday', impact:'high', time:'8:30 AM' },
+  { name:'PPI', day:'Thursday', impact:'high', time:'8:30 AM' },
+  { name:'Retail Sales', day:'Wednesday', impact:'high', time:'8:30 AM' },
+  { name:'GDP', day:'Thursday', impact:'high', time:'8:30 AM' },
 ];
+
+const DAYS = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
 
 export async function GET() {
   const now = new Date();
-  const nyNow = new Date(now.toLocaleString('en-US', { timeZone: 'America/New_York' }));
-  
-  let rawEvents: {date:string;time:string;name:string;impact:string;currency:string}[] = [];
+  const nyNow = new Date(now.toLocaleString('en-US',{timeZone:'America/New_York'}));
+  const nyDay = DAYS[nyNow.getDay()];
+  const nyHour = nyNow.getHours();
 
-  // Try live ForexFactory feed
-  const ffData = await fetchForexFactory();
-  if (ffData && Array.isArray(ffData)) {
-    rawEvents = ffData
-      .filter((e: any) => e.currency === 'USD' && e.impact !== 'Non-Economic')
-      .map((e: any) => {
-        const impactMap: Record<string,string> = { 'High': 'high', 'Medium': 'medium', 'Low': 'low' };
-        const isHighKeyword = HIGH_IMPACT_KEYWORDS.some(k => e.title?.includes(k));
-        const impact = isHighKeyword ? (e.impact === 'High' ? 'critical' : 'high') : impactMap[e.impact] ?? 'low';
-        return { date: e.date?.slice(0,10) ?? '', time: e.time ?? '00:00', name: e.title ?? '', impact, currency: e.currency ?? 'USD' };
-      })
-      .filter(e => e.impact === 'high' || e.impact === 'critical');
-  } else {
-    // Use static fallback
-    rawEvents = STATIC_EVENTS;
-  }
+  // Try ForexFactory first
+  try {
+    const r = await fetch('https://nfs.faireconomy.media/ff_calendar_thisweek.json', {
+      headers:{'User-Agent':'Mozilla/5.0'}, cache:'no-store', signal: AbortSignal.timeout(3000)
+    });
+    if (r.ok) {
+      const data = await r.json();
+      const events = data
+        .filter((e:any) => ['USD'].includes(e.country) && ['High Impact Expected','Medium Impact Expected'].includes(e.impact))
+        .map((e:any) => {
+          const eDate = new Date(e.date);
+          const eNY = new Date(eDate.toLocaleString('en-US',{timeZone:'America/New_York'}));
+          const diffMin = Math.round((eDate.getTime()-now.getTime())/60000);
+          const isToday = eNY.toDateString()===nyNow.toDateString();
+          const isDangerZone = isToday && diffMin > -60 && diffMin < 30;
+          return { name:e.title, date:eDate.toISOString().slice(0,10), time:e.date.split('T')[1]?.slice(0,5), impact:e.impact.includes('High')?'critical':'high', isToday, diffMin, isDangerZone };
+        })
+        .sort((a:any,b:any)=>new Date(a.date).getTime()-new Date(b.date).getTime())
+        .slice(0,10);
+      return NextResponse.json({ events, source:'forexfactory' });
+    }
+  } catch {}
 
-  // Only show next 5 days
-  const cutoff = new Date(now.getTime() + 5 * 24 * 60 * 60 * 1000);
-  
-  const events = rawEvents
-    .filter(e => {
-      const d = new Date(e.date + 'T00:00:00');
-      return d >= new Date(now.toDateString()) && d <= cutoff;
-    })
-    .map(e => {
-      const [hStr, mStr] = (e.time || '08:30').split(':');
-      const h = parseInt(hStr), m = parseInt(mStr || '0');
-      const eventNY = new Date(now.toLocaleString('en-US', { timeZone: 'America/New_York' }));
-      const eventDate = new Date(e.date);
-      const isToday = eventDate.toDateString() === new Date(now.toLocaleString('en-US',{timeZone:'America/New_York'})).toDateString();
-      const nyH = nyNow.getHours(), nyM = nyNow.getMinutes();
-      const diffMin = isToday ? (h * 60 + m) - (nyH * 60 + nyM) : null;
-      const isDangerZone = diffMin !== null && diffMin >= -30 && diffMin <= 60 && (e.impact === 'high' || e.impact === 'critical');
-      return { ...e, isToday, diffMin, isDangerZone };
-    })
-    .sort((a, b) => a.date.localeCompare(b.date) || (a.time||'').localeCompare(b.time||''));
+  // Fallback: static events
+  const events = STATIC_EVENTS.map(e => {
+    const dayDiff = ((DAYS.indexOf(e.day) - nyNow.getDay() + 7) % 7);
+    const eDate = new Date(nyNow);
+    eDate.setDate(eDate.getDate() + dayDiff);
+    const [hStr, rest] = e.time.split(':');
+    const [mStr, ampm] = rest.split(' ');
+    let h = parseInt(hStr); const m = parseInt(mStr);
+    if (ampm==='PM'&&h!==12) h+=12;
+    eDate.setHours(h,m,0,0);
+    const diffMin = Math.round((eDate.getTime()-now.getTime())/60000);
+    const isToday = dayDiff===0;
+    const isDangerZone = isToday && diffMin > -60 && diffMin < 30;
+    return { name:e.name, date:eDate.toISOString().slice(0,10), time:e.time, impact:e.impact, isToday, diffMin, isDangerZone };
+  }).sort((a,b)=>new Date(a.date).getTime()-new Date(b.date).getTime());
 
-  return NextResponse.json({ events, source: ffData ? 'live' : 'static', count: events.length });
+  return NextResponse.json({ events, source:'static' });
 }
