@@ -1,120 +1,115 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 export const dynamic = 'force-dynamic';
-const supabase = createClient((process.env.NEXT_PUBLIC_SUPABASE_URL ?? 'https://xavkbjbgmuasfkliptsh.supabase.co'), (process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhhdmtiamdtdWFzZmtsaXB0c2giLCJyb2xlIjoiYW5vbiIsImlhdCI6MTc0NjgxNTU5MiwiZXhwIjoyMDYyMzkxNTkyfQ.LMkYBBaSHNFUOm3ETy1N1PL60vVCj7kpORCBJ6mGf1M'));
+const sb = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL ?? 'https://xavkbjbgmuasfkliptsh.supabase.co',
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhhdmtiamdtdWFzZmtsaXB0c2giLCJyb2xlIjoiYW5vbiIsImlhdCI6MTc0NjgxNTU5MiwiZXhwIjoyMDYyMzkxNTkyfQ.LMkYBBaSHNFUOm3ETy1N1PL60vVCj7kpORCBJ6mGf1M'
+);
 
-interface Candle { t: number; o: number; h: number; l: number; c: number; v?: number; }
-
-async function fetchCandles(symbol: string, tf: string): Promise<Candle[]> {
+async function fetchCandles(symbol: string, tf: string) {
   try {
-    const yahooMap: Record<string,string> = { NQ:'NQ=F', ES:'ES=F', GC:'GC=F', CL:'CL=F', BTC:'BTC-USD', ETH:'ETH-USD', SOL:'SOL-USD', SPY:'SPY', QQQ:'QQQ' };
-    const ySym = yahooMap[symbol] ?? `${symbol}=F`;
-    const interval = tf==='15m'?'15m':tf==='1h'?'60m':'1d';
-    const range = tf==='15m'?'5d':tf==='1h'?'1mo':'1y';
-    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ySym)}?interval=${interval}&range=${range}`;
-    const res = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' }, cache: 'no-store' });
-    if (!res.ok) return [];
-    const json = await res.json();
-    const result = json?.chart?.result?.[0];
-    if (!result) return [];
-    const ts: number[] = result.timestamp ?? [];
-    const q = result.indicators?.quote?.[0] ?? {};
-    return ts.map((t,i) => ({ t:t*1000, o:q.open?.[i], h:q.high?.[i], l:q.low?.[i], c:q.close?.[i], v:q.volume?.[i] })).filter(c=>c.o!=null&&c.h!=null&&c.l!=null&&c.c!=null);
+    const map:Record<string,string>={NQ:'NQ=F',ES:'ES=F',GC:'GC=F',BTC:'BTC-USD',ETH:'ETH-USD',EURUSD:'EURUSD=X',GBPUSD:'GBPUSD=X',SPY:'SPY',QQQ:'QQQ'};
+    const ySym = map[symbol]??`${symbol}=F`;
+    const intv = tf==='15m'?'15m':tf==='1h'?'60m':'1d';
+    const rng = tf==='15m'?'1mo':tf==='1h'?'3mo':'1y';
+    const r = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ySym)}?interval=${intv}&range=${rng}`,{headers:{'User-Agent':'Mozilla/5.0'},cache:'no-store'});
+    if(!r.ok) return [];
+    const d = await r.json();
+    const res = d?.chart?.result?.[0];
+    if(!res) return [];
+    const ts:number[]=res.timestamp??[];
+    const q=res.indicators?.quote?.[0]??{};
+    return ts.map((t,i)=>({t:t*1000,o:q.open?.[i],h:q.high?.[i],l:q.low?.[i],c:q.close?.[i]})).filter((c:any)=>c.o!=null&&c.h!=null&&c.l!=null&&c.c!=null);
   } catch { return []; }
 }
 
-function runBacktest(candles: Candle[], entryPct: number, slPct: number, tpPct: number, direction: 'bull'|'bear') {
-  const results: {win:boolean, rr:number, pnl:number, entryIdx:number}[] = [];
-  const ptValue = 20; // NQ default
-  for (let i = 20; i < candles.length - 10; i++) {
-    const price = candles[i].c;
-    const entry = direction === 'bull' ? price * (1 - entryPct/100) : price * (1 + entryPct/100);
-    const sl    = direction === 'bull' ? entry * (1 - slPct/100)    : entry * (1 + slPct/100);
-    const tp    = direction === 'bull' ? entry * (1 + tpPct/100)    : entry * (1 - tpPct/100);
-    // Simulate next 10 candles
-    let hit: 'tp'|'sl'|null = null;
-    for (let j = i+1; j < Math.min(i+11, candles.length); j++) {
-      if (direction === 'bull') {
-        if (candles[j].l <= sl) { hit = 'sl'; break; }
-        if (candles[j].h >= tp) { hit = 'tp'; break; }
-      } else {
-        if (candles[j].h >= sl) { hit = 'sl'; break; }
-        if (candles[j].l <= tp) { hit = 'tp'; break; }
+function runBacktest(candles: any[], direction: string) {
+  const trades: {entry:number;sl:number;tp:number;result:'win'|'loss';rr:number;pnl:number}[] = [];
+  const isBull = direction==='bull';
+
+  for (let i=20; i<candles.length-5; i++) {
+    const c = candles[i];
+    const range = c.h - c.l;
+    if (range < 0.001) continue;
+
+    // Simple ICT-style entry: look for FVG-like moves
+    const prev3 = candles.slice(i-3,i);
+    const impulse = Math.abs(c.c - c.o) / range;
+    if (impulse < 0.6) continue; // not strong enough candle
+
+    if (isBull && c.c > c.o) {
+      const entry = c.h * 0.9997 + c.l * 0.0003;
+      const sl = c.l - range * 0.5;
+      const tp = entry + (entry - sl) * 2.5;
+      const future = candles.slice(i+1, i+8);
+      let result: 'win'|'loss' = 'loss';
+      for (const fc of future) {
+        if (fc.l <= sl) { result='loss'; break; }
+        if (fc.h >= tp) { result='win'; break; }
       }
+      const rr = result==='win' ? 2.5 : -1;
+      trades.push({ entry, sl, tp, result, rr, pnl: rr * 100 });
     }
-    if (hit) {
-      const pnl = hit === 'tp' ? Math.abs(tp-entry)*ptValue : -Math.abs(entry-sl)*ptValue;
-      const rr = Math.abs(tp-entry)/Math.abs(entry-sl);
-      results.push({ win: hit==='tp', rr, pnl, entryIdx: i });
+    if (!isBull && c.c < c.o) {
+      const entry = c.l * 0.9997 + c.h * 0.0003;
+      const sl = c.h + range * 0.5;
+      const tp = entry - (sl - entry) * 2.5;
+      const future = candles.slice(i+1, i+8);
+      let result: 'win'|'loss' = 'loss';
+      for (const fc of future) {
+        if (fc.h >= sl) { result='loss'; break; }
+        if (fc.l <= tp) { result='win'; break; }
+      }
+      const rr = result==='win' ? 2.5 : -1;
+      trades.push({ entry, sl, tp, result, rr, pnl: rr * 100 });
     }
   }
-  return results;
-}
-
-export async function POST(req: NextRequest) {
-  try {
-    const { symbol='NQ', timeframe='15m', direction='bull', entryPct=0.2, slPct=0.15, tpPct=0.5, name='Backtest' } = await req.json();
-    const candles = await fetchCandles(symbol, timeframe);
-    if (candles.length < 30) return NextResponse.json({ error: 'Not enough candle data' }, { status: 400 });
-
-    const results = runBacktest(candles, entryPct, slPct, tpPct, direction);
-    if (!results.length) return NextResponse.json({ error: 'No trades triggered' }, { status: 400 });
-
-    const wins = results.filter(r => r.win).length;
-    const losses = results.length - wins;
-    const winRate = wins / results.length;
-    const totalPnl = results.reduce((a, r) => a + r.pnl, 0);
-    const avgRR = results.reduce((a, r) => a + r.rr, 0) / results.length;
-    const grossWin = results.filter(r=>r.win).reduce((a,r)=>a+r.pnl,0);
-    const grossLoss = Math.abs(results.filter(r=>!r.win).reduce((a,r)=>a+r.pnl,0));
-    const profitFactor = grossLoss > 0 ? grossWin/grossLoss : grossWin > 0 ? 999 : 0;
-
-    // Max drawdown
-    let peak = 0, equity = 0, maxDD = 0;
-    for (const r of results) {
-      equity += r.pnl;
-      if (equity > peak) peak = equity;
-      const dd = peak - equity;
-      if (dd > maxDD) maxDD = dd;
-    }
-
-    // Max consecutive losses
-    let maxConsec = 0, consec = 0;
-    for (const r of results) {
-      if (!r.win) { consec++; maxConsec = Math.max(maxConsec, consec); } else consec = 0;
-    }
-
-    // Sharpe (simplified)
-    const pnls = results.map(r => r.pnl);
-    const mean = totalPnl / pnls.length;
-    const std = Math.sqrt(pnls.reduce((a,p) => a + Math.pow(p-mean,2),0)/pnls.length);
-    const sharpe = std > 0 ? mean/std : 0;
-
-    const run = {
-      name, symbol, timeframe,
-      start_date: new Date(candles[0].t*1000).toISOString().slice(0,10),
-      end_date: new Date(candles[candles.length-1].t*1000).toISOString().slice(0,10),
-      total_trades: results.length, wins, losses,
-      win_rate: parseFloat((winRate*100).toFixed(1)),
-      total_pnl: parseFloat(totalPnl.toFixed(0)),
-      max_drawdown: parseFloat(maxDD.toFixed(0)),
-      sharpe_ratio: parseFloat(sharpe.toFixed(2)),
-      profit_factor: parseFloat(profitFactor.toFixed(2)),
-      expectancy: parseFloat((totalPnl/results.length).toFixed(0)),
-      avg_rr: parseFloat(avgRR.toFixed(2)),
-      max_consecutive_losses: maxConsec,
-      parameters: { direction, entryPct, slPct, tpPct }
-    };
-
-    const { data, error } = await supabase.from('backtest_runs').insert(run).select();
-    if (error) throw error;
-    return NextResponse.json({ run: data[0], trades: results.length });
-  } catch (err) {
-    return NextResponse.json({ error: err instanceof Error ? err.message : String(err) }, { status: 500 });
-  }
+  return trades;
 }
 
 export async function GET() {
-  const { data } = await supabase.from('backtest_runs').select('*').order('created_at', { ascending: false }).limit(20);
-  return NextResponse.json({ runs: data ?? [] });
+  try {
+    const { data } = await sb.from('backtest_runs').select('*').order('created_at',{ascending:false}).limit(20);
+    return NextResponse.json({ runs: data ?? [] });
+  } catch { return NextResponse.json({ runs: [] }); }
+}
+
+export async function POST(req: NextRequest) {
+  const { symbol='NQ', timeframe='1h', direction='bull' } = await req.json();
+  const candles = await fetchCandles(symbol, timeframe);
+  if (candles.length < 50) return NextResponse.json({ error:'Insufficient data' }, { status:400 });
+
+  const trades = runBacktest(candles, direction);
+  if (!trades.length) return NextResponse.json({ error:'No setups found in data' }, { status:400 });
+
+  const wins = trades.filter(t=>t.result==='win');
+  const losses = trades.filter(t=>t.result==='loss');
+  const totalPnl = trades.reduce((a,t)=>a+t.pnl,0);
+  const winR = wins.reduce((a,t)=>a+t.rr,0);
+  const lossR = Math.abs(losses.reduce((a,t)=>a+t.rr,0));
+  const winRate = +(wins.length/trades.length*100).toFixed(1);
+  const pf = lossR>0 ? +(winR/lossR).toFixed(2) : 99;
+
+  let peak=0, dd=0, maxDD=0, cur=0;
+  trades.forEach(t=>{ cur+=t.pnl; if(cur>peak)peak=cur; dd=peak-cur; if(dd>maxDD)maxDD=dd; });
+  let streak=0,maxStreak=0;
+  trades.forEach(t=>{ if(t.result==='loss'){streak++;maxStreak=Math.max(maxStreak,streak);}else streak=0; });
+
+  const run = {
+    symbol, timeframe, start_date:new Date(candles[0].t).toISOString().slice(0,10),
+    end_date:new Date(candles[candles.length-1].t).toISOString().slice(0,10),
+    total_trades:trades.length, wins:wins.length, losses:losses.length,
+    win_rate:winRate, total_pnl:+totalPnl.toFixed(2), max_drawdown:+maxDD.toFixed(2),
+    profit_factor:pf, sharpe_ratio:+(totalPnl/(trades.length*10)).toFixed(2),
+    expectancy:+(totalPnl/trades.length).toFixed(2),
+    avg_rr:+(trades.reduce((a,t)=>a+t.rr,0)/trades.length).toFixed(2),
+    max_consecutive_losses:maxStreak,
+    parameters:{direction}
+  };
+
+  try {
+    await sb.from('backtest_runs').insert(run);
+  } catch {}
+
+  return NextResponse.json({ run });
 }
