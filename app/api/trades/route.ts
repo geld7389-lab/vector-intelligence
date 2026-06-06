@@ -1,63 +1,132 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 export const dynamic = 'force-dynamic';
+
 const sb = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL ?? 'https://xavkbjbgmuasfkliptsh.supabase.co',
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhhdmtiamdtdWFzZmtsaXB0c2giLCJyb2xlIjoiYW5vbiIsImlhdCI6MTc0NjgxNTU5MiwiZXhwIjoyMDYyMzkxNTkyfQ.LMkYBBaSHNFUOm3ETy1N1PL60vVCj7kpORCBJ6mGf1M'
 );
-function detectSession(entryTime: string) {
-  const d = new Date(entryTime);
-  const h = parseInt(d.toLocaleString('en-US',{timeZone:'America/New_York',hour:'numeric',hour12:false}));
+
+function detectSession(): string {
+  const h = new Date(new Date().toLocaleString('en-US',{timeZone:'America/New_York'})).getHours();
   if (h >= 2 && h < 5) return 'London';
-  if (h >= 9 && h < 11) return 'NY AM';
-  if (h >= 14 && h < 16) return 'NY PM';
-  if (h >= 20 || h < 2) return 'Asia';
+  if (h >= 9 && h < 12) return 'New York AM';
+  if (h >= 14 && h < 16) return 'New York PM';
+  if (h >= 20 || h < 1) return 'Asia';
   return 'Off-session';
 }
+
 export async function GET() {
-  const { data, error } = await sb.from('trade_log').select('*').order('entry_time', { ascending: false }).limit(200);
+  const { data, error } = await sb
+    .from('trades')
+    .select('*')
+    .order('opened_at', { ascending: false })
+    .limit(100);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ trades: data ?? [] });
+
+  // Map DB columns to frontend expected format
+  const trades = (data ?? []).map(t => {
+    let extra: any = {};
+    try { extra = t.notes ? JSON.parse(t.notes.split('__META__')[1] ?? '{}') : {}; } catch {}
+    return {
+      id: t.id,
+      symbol: t.symbol,
+      direction: t.direction === 'long' ? 'bull' : t.direction === 'short' ? 'bear' : t.direction,
+      entry_price: t.entry_price,
+      stop_loss: t.stop_loss,
+      target: t.take_profit,
+      exit_price: t.rr_achieved != null ? t.entry_price : null, // approximation
+      result: t.result === 'open' ? 'open' : t.result === 'win' ? 'win' : t.result === 'loss' ? 'loss' : 'be',
+      r_multiple: t.rr_achieved,
+      pnl_dollars: extra.pnl_dollars ?? null,
+      risk_dollars: extra.risk_dollars ?? 100,
+      setup_type: extra.setup_type ?? null,
+      timeframe: extra.timeframe ?? null,
+      session: extra.session ?? null,
+      notes: t.notes ? t.notes.split('__META__')[0] : '',
+      mistakes: extra.mistakes ?? [],
+      created_at: t.opened_at,
+      closed_at: t.closed_at,
+    };
+  });
+
+  return NextResponse.json({ trades });
 }
+
 export async function POST(req: NextRequest) {
   const body = await req.json();
-  const { symbol, direction, entry_price, stop_loss, target, risk_dollars, risk_pct, setup_id, setup_type, timeframe, notes, mistakes = [], entry_time } = body;
-  const eTime = entry_time || new Date().toISOString();
-  const session = detectSession(eTime);
-  const slDist = Math.abs(entry_price - stop_loss);
-  const tpDist = Math.abs(target - entry_price);
-  const planned_rr = slDist > 0 ? +(tpDist / slDist).toFixed(2) : 0;
-  const { data, error } = await sb.from('trade_log').insert({
-    symbol, direction, entry_price, stop_loss, target,
-    risk_dollars: risk_dollars ?? 100, risk_pct: risk_pct ?? 1,
-    setup_id, setup_type, timeframe, notes, mistakes,
-    session, entry_time: eTime, planned_rr, result: 'open',
-    created_at: new Date().toISOString()
+  const { symbol, direction, entry_price, stop_loss, target, risk_dollars = 100,
+    setup_id, setup_type, timeframe, notes = '', mistakes = [] } = body;
+
+  const session = detectSession();
+  const dbDir = direction === 'bull' || direction === 'long' ? 'long' : 'short';
+  const rr = Math.abs(target - entry_price) / Math.abs(entry_price - stop_loss);
+  const meta = JSON.stringify({ risk_dollars, setup_type, timeframe, session, mistakes, pnl_dollars: null });
+  const fullNotes = notes ? `${notes}__META__${meta}` : `__META__${meta}`;
+
+  const { data, error } = await sb.from('trades').insert({
+    symbol,
+    direction: dbDir,
+    entry_price,
+    stop_loss,
+    take_profit: target,
+    result: 'open',
+    notes: fullNotes,
+    opened_at: new Date().toISOString(),
+    setup_id: setup_id ?? null,
   }).select().single();
+
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ trade: data });
 }
+
 export async function PATCH(req: NextRequest) {
-  const { id, exit_price, notes, mistakes } = await req.json();
-  if (!id || !exit_price) return NextResponse.json({ error: 'id and exit_price required' }, { status: 400 });
-  const { data: t } = await sb.from('trade_log').select('*').eq('id', id).single();
-  if (!t) return NextResponse.json({ error: 'Not found' }, { status: 404 });
-  const isBull = t.direction === 'bull' || t.direction === 'long';
-  const pnl_pts = isBull ? exit_price - t.entry_price : t.entry_price - exit_price;
-  const sl_dist = Math.abs(t.entry_price - t.stop_loss);
-  const r_multiple = sl_dist > 0 ? +(pnl_pts / sl_dist).toFixed(2) : 0;
-  const pnl_dollars = t.risk_dollars ? +(r_multiple * t.risk_dollars).toFixed(2) : 0;
-  const result = r_multiple >= 1.8 ? 'win' : r_multiple <= -0.9 ? 'loss' : r_multiple > 0 ? 'be' : 'loss';
-  const { data, error } = await sb.from('trade_log').update({
-    exit_price, exit_time: new Date().toISOString(),
-    r_multiple, pnl_dollars, result,
-    notes: notes ?? t.notes, mistakes: mistakes ?? t.mistakes
+  const { id, exit_price, notes: newNotes = '', mistakes = [] } = await req.json();
+
+  const { data: existing } = await sb.from('trades').select('*').eq('id', id).single();
+  if (!existing) return NextResponse.json({ error: 'Trade not found' }, { status: 404 });
+
+  let existingMeta: any = {};
+  try { existingMeta = JSON.parse(existing.notes?.split('__META__')[1] ?? '{}'); } catch {}
+
+  const isBull = existing.direction === 'long';
+  const rr = +((( isBull ? exit_price - existing.entry_price : existing.entry_price - exit_price) /
+    Math.abs(existing.entry_price - existing.stop_loss)).toFixed(2));
+  const result = rr > 0.1 ? 'win' : rr < -0.1 ? 'loss' : 'breakeven';
+  const pnl_dollars = +((rr * (existingMeta.risk_dollars ?? 100)).toFixed(2));
+
+  const newMistakes = [...new Set([...(existingMeta.mistakes ?? []), ...mistakes])];
+  const meta = JSON.stringify({ ...existingMeta, mistakes: newMistakes, pnl_dollars, exit_price });
+  const existingNoteText = existing.notes?.split('__META__')[0] ?? '';
+  const combinedNotes = newNotes ? `${newNotes}__META__${meta}` : existingNoteText ? `${existingNoteText}__META__${meta}` : `__META__${meta}`;
+
+  const { data, error } = await sb.from('trades').update({
+    result,
+    rr_achieved: rr,
+    notes: combinedNotes,
+    closed_at: new Date().toISOString(),
   }).eq('id', id).select().single();
+
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ trade: data });
+
+  let extra: any = {};
+  try { extra = JSON.parse(data.notes?.split('__META__')[1] ?? '{}'); } catch {}
+
+  return NextResponse.json({
+    trade: {
+      id: data.id, symbol: data.symbol,
+      direction: data.direction === 'long' ? 'bull' : 'bear',
+      entry_price: data.entry_price, stop_loss: data.stop_loss, target: data.take_profit,
+      result, r_multiple: rr, pnl_dollars, risk_dollars: extra.risk_dollars ?? 100,
+      setup_type: extra.setup_type, session: extra.session, notes: data.notes?.split('__META__')[0] ?? '',
+      mistakes: extra.mistakes ?? [], created_at: data.opened_at, closed_at: data.closed_at,
+    }
+  });
 }
+
 export async function DELETE(req: NextRequest) {
   const { id } = await req.json();
-  await sb.from('trade_log').delete().eq('id', id);
+  const { error } = await sb.from('trades').delete().eq('id', id);
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ ok: true });
 }
