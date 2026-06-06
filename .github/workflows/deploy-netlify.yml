@@ -30,48 +30,30 @@ jobs:
       - name: Install Netlify CLI
         run: npm install -g netlify-cli@17
 
-      - name: Get site ID
+      - name: Get site and build + deploy
         run: |
           SITES=$(curl -s -H "Authorization: Bearer $NETLIFY_AUTH_TOKEN" "https://api.netlify.com/api/v1/sites?filter=all&per_page=100")
           SITE_ID=$(echo "$SITES" | jq -r '.[] | select(.name == "vector-intelligence-prod") | .id' | head -1)
           if [ -z "$SITE_ID" ]; then
             SITE_ID=$(curl -s -X POST -H "Authorization: Bearer $NETLIFY_AUTH_TOKEN" -H "Content-Type: application/json" -d '{"name":"vector-intelligence-prod"}' "https://api.netlify.com/api/v1/sites" | jq -r '.id')
           fi
-          echo "NETLIFY_SITE_ID=$SITE_ID" >> $GITHUB_ENV
+          echo "Site ID: $SITE_ID"
+          
           mkdir -p .netlify
           echo "{\"siteId\":\"$SITE_ID\"}" > .netlify/state.json
-          echo "Site ID: $SITE_ID"
-
-      - name: Build
-        run: npm run build
-
-      - name: Debug and Deploy
-        run: |
-          echo "=== .netlify contents ==="
-          ls -la .netlify/ || echo "no .netlify"
-          echo "=== .next contents ==="
-          ls .next/ | head -10
-          echo "=== Deploying ==="
-          netlify deploy --prod 2>&1 | tee /tmp/deploy_output.txt
-          EXIT=$?
-          cat /tmp/deploy_output.txt
-          echo "Exit code: $EXIT"
           
-          if [ $EXIT -ne 0 ]; then
-            git config user.email "ci@vector.com"
-            git config user.name "CI"
-            cp /tmp/deploy_output.txt DEPLOY_ERROR.txt
-            git add DEPLOY_ERROR.txt
-            git diff --staged --quiet || git commit -m "ci: deploy error log [skip ci]" && git push origin main
-          fi
-        continue-on-error: true
-
-      - name: Check result
-        run: |
-          if grep -q "Website URL" /tmp/deploy_output.txt 2>/dev/null; then
-            echo "DEPLOY SUCCESS"
-            grep "Website URL" /tmp/deploy_output.txt
-          else
-            echo "DEPLOY FAILED - see DEPLOY_ERROR.txt in repo"
-            exit 1
-          fi
+          echo "=== NETLIFY DEPLOY --build ==="
+          OUTPUT=$(netlify deploy --prod --build --site=$SITE_ID 2>&1)
+          EXIT=$?
+          echo "$OUTPUT"
+          echo "EXIT: $EXIT"
+          
+          URL=$(echo "$OUTPUT" | grep -oE 'https://[a-zA-Z0-9._-]+.netlify.app' | head -1)
+          echo "Deployed URL: $URL"
+          echo "$OUTPUT" > NETLIFY_OUTPUT.txt
+          echo "$URL" > NETLIFY_LIVE_URL.txt
+          
+          git config user.email "ci@vector.com"
+          git config user.name "CI"
+          git add NETLIFY_OUTPUT.txt NETLIFY_LIVE_URL.txt
+          git diff --staged --quiet || (git commit -m "deploy: netlify output [skip ci]" && git push origin main)
