@@ -29,34 +29,32 @@ jobs:
       - name: Install Vercel CLI
         run: npm install -g vercel@latest
 
-      - name: Check Vercel token and find/create project
+      - name: Clear old Vercel project config
         run: |
-          echo "=== Checking Vercel token ==="
-          USER=$(curl -s -H "Authorization: Bearer ${{ secrets.VERCEL_TOKEN }}" https://api.vercel.com/v2/user)
-          echo "Response: $(echo $USER | head -c 200)"
-          
-          USERNAME=$(echo $USER | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('user',{}).get('username','NO_USER'))" 2>/dev/null || echo "PARSE_ERROR")
-          echo "Username: $USERNAME"
-          
-          echo "=== Listing projects ==="
-          PROJECTS=$(curl -s -H "Authorization: Bearer ${{ secrets.VERCEL_TOKEN }}" https://api.vercel.com/v9/projects?limit=10)
-          echo "Projects: $(echo $PROJECTS | python3 -c "import json,sys; d=json.load(sys.stdin); [print(p.get('id'),p.get('name')) for p in d.get('projects',[])]" 2>/dev/null || echo $PROJECTS | head -c 300)"
+          rm -rf .vercel
+          echo "Cleared .vercel"
 
       - name: Build
         run: npm run build
 
-      - name: Deploy
+      - name: Deploy to Vercel
         run: |
+          set +e
           OUTPUT=$(vercel deploy --prod --yes --token=${{ secrets.VERCEL_TOKEN }} 2>&1)
+          EXIT=$?
+          echo "=== FULL OUTPUT ==="
           echo "$OUTPUT"
-          URL=$(echo "$OUTPUT" | grep -oE 'https://[^[:space:]]+' | grep -v 'inspect' | tail -1)
-          echo "DEPLOY_URL=$URL" >> $GITHUB_ENV
-          echo "Deployed to: $URL"
-
-      - name: Save URL to repo
-        run: |
-          echo "$DEPLOY_URL" > VERCEL_URL.txt
+          echo "=== EXIT: $EXIT ==="
+          
+          URL=$(echo "$OUTPUT" | grep -oE 'https://[a-zA-Z0-9._-]+' | grep 'vercel' | grep -v 'inspect' | tail -1)
+          echo "URL: $URL"
+          
+          echo "$OUTPUT" > /tmp/vercel_output.txt
+          echo "$URL" > VERCEL_URL.txt
+          
           git config user.email "ci@vector.com"
           git config user.name "CI"
           git add VERCEL_URL.txt
-          git diff --staged --quiet || (git commit -m "deploy: $DEPLOY_URL [skip ci]" && git push origin main)
+          git diff --staged --quiet || (git commit -m "deploy: Vercel URL [skip ci]" && git push origin main)
+          
+          [ $EXIT -eq 0 ]
