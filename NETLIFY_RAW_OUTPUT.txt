@@ -1,0 +1,179 @@
+​
+Netlify Build                                                 
+────────────────────────────────────────────────────────────────
+​
+❯ Version
+  @netlify/build 29.58.0
+​
+❯ Flags
+  accountId: 6a2096ff03452d8ad3fd78ca
+​
+❯ Current directory
+  /home/runner/work/vector-intelligence/vector-intelligence
+​
+❯ Config file
+  /home/runner/work/vector-intelligence/vector-intelligence/netlify.toml
+​
+❯ Context
+  production
+​
+❯ Using Next.js Runtime - v5.15.11
+​
+build.command from netlify.toml                               
+────────────────────────────────────────────────────────────────
+​
+$ npm run build
+
+> vector-intelligence@1.0.0 build
+> next build
+
+⚠ No build cache found. Please configure build caching for faster rebuilds. Read more: https://nextjs.org/docs/messages/no-cache
+  ▲ Next.js 14.2.3
+  - Environments: .env.local
+
+   Creating an optimized production build ...
+ ✓ Compiled successfully
+   Linting and checking validity of types ...
+   Collecting page data ...
+   Generating static pages (0/7) ...
+   Generating static pages (1/7) 
+   Generating static pages (3/7) 
+   Generating static pages (5/7) 
+ ✓ Generating static pages (7/7)
+   Finalizing page optimization ...
+   Collecting build traces ...
+
+Route (app)                              Size     First Load JS
+┌ ○ /                                    74.4 kB         161 kB
+├ ○ /_not-found                          871 B          87.9 kB
+├ ƒ /api/analytics                       0 B                0 B
+├ ƒ /api/analyze                         0 B                0 B
+├ ƒ /api/autoscan                        0 B                0 B
+├ ƒ /api/backtest                        0 B                0 B
+├ ƒ /api/calendar                        0 B                0 B
+├ ƒ /api/candles                         0 B                0 B
+├ ƒ /api/cot                             0 B                0 B
+├ ƒ /api/crypto                          0 B                0 B
+├ ƒ /api/deepbacktest                    0 B                0 B
+├ ƒ /api/drawings                        0 B                0 B
+├ ƒ /api/forex                           0 B                0 B
+├ ƒ /api/health                          0 B                0 B
+├ ƒ /api/killzone                        0 B                0 B
+├ ƒ /api/knowledge                       0 B                0 B
+├ ƒ /api/market                          0 B                0 B
+├ ƒ /api/migrate                         0 B                0 B
+├ ƒ /api/monitor                         0 B                0 B
+├ ƒ /api/news                            0 B                0 B
+├ ƒ /api/newsfeed                        0 B                0 B
+├ ƒ /api/prices                          0 B                0 B
+├ ƒ /api/scanner                         0 B                0 B
+├ ƒ /api/setups                          0 B                0 B
+├ ƒ /api/smt                             0 B                0 B
+├ ƒ /api/stocks                          0 B                0 B
+├ ƒ /api/telegram                        0 B                0 B
+├ ƒ /api/trades                          0 B                0 B
+├ ƒ /api/transcribe                      0 B                0 B
+├ ƒ /api/tv-webhook                      0 B                0 B
+└ ƒ /api/weekbias                        0 B                0 B
++ First Load JS shared by all            87 kB
+  ├ chunks/23-689eda8e83791f79.js        31.5 kB
+  ├ chunks/fd9d1056-23bdddb1df3a91c8.js  53.6 kB
+  └ other shared chunks (total)          1.92 kB
+
+
+○  (Static)   prerendered as static content
+ƒ  (Dynamic)  server-rendered on demand
+
+​
+(build.command completed in 37.9s)
+​
+Functions bundling                                            
+────────────────────────────────────────────────────────────────
+​
+Packaging Functions from .netlify/functions-internal directory:
+ - ___netlify-server-handler/___netlify-server-handler.mjs
+​
+​
+(Functions bundling completed in 1.9s)
+Deploy path:        /home/runner/work/vector-intelligence/vector-intelligence/.next
+Configuration path: /home/runner/work/vector-intelligence/vector-intelligence/netlify.toml
+Deploying to main site URL...
+ ›   Warning: JSONHTTPError:  403
+ ›   Warning: 
+{
+  "name": "JSONHTTPError",
+  "status": 403,
+  "json": {
+    "error": "Account credit usage exceeded - new deploys are blocked until credits are added"
+  }
+}
+
+​
+Internal error during "options.onPostBuild"                   
+────────────────────────────────────────────────────────────────
+​
+  Error message
+  JSONHTTPError: Forbidden
+​
+  Error location
+  During options.onPostBuild
+      at parseResponse (file:///opt/hostedtoolcache/node/20.20.2/x64/lib/node_modules/netlify-cli/node_modules/netlify/lib/methods/response.js:10:39)
+      at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+      at async callMethod (file:///opt/hostedtoolcache/node/20.20.2/x64/lib/node_modules/netlify-cli/node_modules/netlify/lib/methods/index.js:26:28)
+      at async runDeploy (file:///opt/hostedtoolcache/node/20.20.2/x64/lib/node_modules/netlify-cli/dist/commands/deploy/deploy.js:356:19)
+      at async prepAndRunDeploy (file:///opt/hostedtoolcache/node/20.20.2/x64/lib/node_modules/netlify-cli/dist/commands/deploy/deploy.js:603:21)
+      at async deployHandler (file:///opt/hostedtoolcache/node/20.20.2/x64/lib/node_modules/netlify-cli/dist/commands/deploy/deploy.js:688:27)
+      at async fireCoreStep (file:///opt/hostedtoolcache/node/20.20.2/x64/lib/node_modules/netlify-cli/node_modules/@netlify/build/lib/steps/core_step.js:11:98)
+      at async tFireStep (file:///opt/hostedtoolcache/node/20.20.2/x64/lib/node_modules/netlify-cli/node_modules/@netlify/build/lib/time/main.js:18:63)
+      at async file:///opt/hostedtoolcache/node/20.20.2/x64/lib/node_modules/netlify-cli/node_modules/@netlify/build/lib/steps/run_step.js:69:283
+      at async pReduce.index (file:///opt/hostedtoolcache/node/20.20.2/x64/lib/node_modules/netlify-cli/node_modules/@netlify/build/lib/steps/run_steps.js:12:349)
+​
+  Error properties
+  {
+    name: [32m'JSONHTTPError'[39m,
+    status: [33m403[39m,
+    json: {
+      error: [32m'Account credit usage exceeded - new deploys are blocked until credits are added'[39m
+    }
+  }
+​
+  Resolved config
+  build:
+    command: npm run build
+    commandOrigin: config
+    environment:
+      - NEXT_PUBLIC_SUPABASE_URL
+      - NEXT_PUBLIC_SUPABASE_ANON_KEY
+      - GROQ_API_KEY
+      - NODE_VERSION
+      - NPM_FLAGS
+    publish: /home/runner/work/vector-intelligence/vector-intelligence/.next
+    publishOrigin: config
+  functions:
+    '*':
+      node_bundler: esbuild
+  headers:
+    - for: /_next/static/*
+      values:
+        Cache-Control: public, max-age=31536000, immutable
+  headersOrigin: inline
+  plugins:
+    - inputs: {}
+      origin: config
+      package: '@netlify/plugin-nextjs'
+  redirects:
+    - from: /_next/image
+      query:
+        q: ':quality'
+        url: ':url'
+        w: ':width'
+      status: 200
+      to: /.netlify/images?url=:url&w=:width&q=:quality
+    - from: /_ipx/*
+      query:
+        q: ':quality'
+        url: ':url'
+        w: ':width'
+      status: 200
+      to: /.netlify/images?url=:url&w=:width&q=:quality
+  redirectsOrigin: inline
