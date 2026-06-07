@@ -21,8 +21,8 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
-          cache: 'npm'
+          node-version: 20
+          cache: npm
 
       - name: Install
         run: npm ci --legacy-peer-deps
@@ -33,38 +33,32 @@ jobs:
       - name: Get site ID
         id: site
         run: |
-          SITES=$(curl -s -H "Authorization: Bearer $NETLIFY_AUTH_TOKEN" "https://api.netlify.com/api/v1/sites?filter=all&per_page=100")
-          echo "$SITES" > /tmp/sites.json
-          SITE_ID=$(python3 -c "
-import json
-with open('/tmp/sites.json') as f:
-    sites = json.load(f)
-for s in sites:
-    if s.get('name') == 'vector-intelligence-prod':
-        print(s['id'])
-        break
-")
+          curl -s -H "Authorization: Bearer $NETLIFY_AUTH_TOKEN" "https://api.netlify.com/api/v1/sites?filter=all&per_page=100" > /tmp/sites.json
+          node -e "
+            const s=require('/tmp/sites.json');
+            const found=s.find(x=>x.name==='vector-intelligence-prod');
+            console.log(found?found.id:'');
+          " > /tmp/site_id.txt
+          SITE_ID=$(cat /tmp/site_id.txt)
           if [ -z "$SITE_ID" ]; then
             echo "Creating site..."
-            RESP=$(curl -s -X POST -H "Authorization: Bearer $NETLIFY_AUTH_TOKEN" -H "Content-Type: application/json" -d '{"name":"vector-intelligence-prod"}' "https://api.netlify.com/api/v1/sites")
-            SITE_ID=$(python3 -c "import json; print(json.loads('$RESP').get('id',''))" 2>/dev/null || echo "")
+            curl -s -X POST -H "Authorization: Bearer $NETLIFY_AUTH_TOKEN" -H "Content-Type: application/json" \
+              -d '{"name":"vector-intelligence-prod"}' \
+              "https://api.netlify.com/api/v1/sites" > /tmp/new_site.json
+            node -e "const d=require('/tmp/new_site.json');console.log(d.id||'')" > /tmp/site_id.txt
+            SITE_ID=$(cat /tmp/site_id.txt)
           fi
           echo "id=$SITE_ID" >> $GITHUB_OUTPUT
-          echo "Site ID: [$SITE_ID]"
+          echo "Site: $SITE_ID"
 
-      - name: Build
-        run: npm run build
-
-      - name: Deploy
+      - name: Build and deploy
         run: |
           SITE_ID="${{ steps.site.outputs.id }}"
-          echo "Deploying to: $SITE_ID"
           netlify deploy --prod --build --site="$SITE_ID" 2>&1 | tee /tmp/out.txt
           cat /tmp/out.txt
           URL=$(grep -oE 'https://[a-zA-Z0-9_.-]+\.netlify\.app' /tmp/out.txt | head -1)
-          echo "Live URL: $URL"
+          echo "URL: $URL"
           echo "$URL" > NETLIFY_LIVE_URL.txt
-          git config user.email "ci@vector.com"
-          git config user.name "CI"
+          git config user.email ci@v.com && git config user.name CI
           git add NETLIFY_LIVE_URL.txt
-          git diff --staged --quiet || (git commit -m "deploy: $URL [skip ci]" && git push origin main)
+          git diff --staged --quiet || (git commit -m "url [skip ci]" && git push origin main) || true
