@@ -34,17 +34,10 @@ jobs:
         id: site
         run: |
           curl -s -H "Authorization: Bearer $NETLIFY_AUTH_TOKEN" "https://api.netlify.com/api/v1/sites?filter=all&per_page=100" > /tmp/sites.json
-          node -e "
-            const s=require('/tmp/sites.json');
-            const found=s.find(x=>x.name==='vector-intelligence-prod');
-            console.log(found?found.id:'');
-          " > /tmp/site_id.txt
+          node -e "const s=require('/tmp/sites.json');const f=s.find(x=>x.name==='vector-intelligence-prod');console.log(f?f.id:'')" > /tmp/site_id.txt
           SITE_ID=$(cat /tmp/site_id.txt)
           if [ -z "$SITE_ID" ]; then
-            echo "Creating site..."
-            curl -s -X POST -H "Authorization: Bearer $NETLIFY_AUTH_TOKEN" -H "Content-Type: application/json" \
-              -d '{"name":"vector-intelligence-prod"}' \
-              "https://api.netlify.com/api/v1/sites" > /tmp/new_site.json
+            curl -s -X POST -H "Authorization: Bearer $NETLIFY_AUTH_TOKEN" -H "Content-Type: application/json" -d '{"name":"vector-intelligence-prod"}' "https://api.netlify.com/api/v1/sites" > /tmp/new_site.json
             node -e "const d=require('/tmp/new_site.json');console.log(d.id||'')" > /tmp/site_id.txt
             SITE_ID=$(cat /tmp/site_id.txt)
           fi
@@ -54,11 +47,15 @@ jobs:
       - name: Build and deploy
         run: |
           SITE_ID="${{ steps.site.outputs.id }}"
-          netlify deploy --prod --build --site="$SITE_ID" 2>&1 | tee /tmp/out.txt
+          netlify deploy --prod --build --site="$SITE_ID" 2>&1 | tee /tmp/out.txt || true
+          echo "=== RAW OUTPUT ==="
           cat /tmp/out.txt
-          URL=$(grep -oE 'https://[a-zA-Z0-9_.-]+\.netlify\.app' /tmp/out.txt | head -1)
-          echo "URL: $URL"
-          echo "$URL" > NETLIFY_LIVE_URL.txt
+          echo "=== GREP TEST ==="
+          grep -i "url\|http\|deploy\|website\|live\|prod" /tmp/out.txt || echo "no matches"
+
+      - name: Save output to repo
+        run: |
+          cp /tmp/out.txt NETLIFY_RAW_OUTPUT.txt
           git config user.email ci@v.com && git config user.name CI
-          git add NETLIFY_LIVE_URL.txt
-          git diff --staged --quiet || (git commit -m "url [skip ci]" && git push origin main) || true
+          git add NETLIFY_RAW_OUTPUT.txt
+          git diff --staged --quiet || (git commit -m "debug: save netlify output [skip ci]" && git push origin main) || true
