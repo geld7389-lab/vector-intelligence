@@ -1,50 +1,32 @@
-name: Get Vercel URL
+name: Check Deployments
 
 on:
   workflow_dispatch:
 
 jobs:
-  geturl:
+  check:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-        with:
-          token: ${{ secrets.GH_PAT }}
-
-      - name: Get latest deployment URL
+      - name: List all deployments
         run: |
           VT="${{ secrets.VERCEL_TOKEN }}"
           
-          # Find the project
+          # List all projects
           curl -s -H "Authorization: Bearer $VT" "https://api.vercel.com/v9/projects?limit=20" > /tmp/projs.json
-          PROJ_ID=$(node -e "const d=require('/tmp/projs.json');const p=d.projects?.find(x=>x.name==='vector-intelligence');process.stdout.write(p?.id||'NOT_FOUND')")
-          echo "Project: $PROJ_ID"
-          
-          # Get latest deployments
-          curl -s -H "Authorization: Bearer $VT" "https://api.vercel.com/v6/deployments?projectId=$PROJ_ID&limit=5" > /tmp/deps.json
-          cat /tmp/deps.json
-          
+          echo "=== PROJECTS ==="
           node -e "
-            const d=require('/tmp/deps.json');
-            const deps=d.deployments||[];
-            deps.forEach(dep=>{
-              console.log(dep.state, dep.url, dep.created);
-            });
+            const d=require('/tmp/projs.json');
+            (d.projects||[]).forEach(p=>console.log(p.id, p.name));
           "
-
-      - name: Save URL
-        run: |
-          VT="${{ secrets.VERCEL_TOKEN }}"
-          curl -s -H "Authorization: Bearer $VT" "https://api.vercel.com/v9/projects?limit=20" > /tmp/projs.json
-          PROJ_ID=$(node -e "const d=require('/tmp/projs.json');const p=d.projects?.find(x=>x.name==='vector-intelligence');process.stdout.write(p?.id||'')")
-          curl -s -H "Authorization: Bearer $VT" "https://api.vercel.com/v6/deployments?projectId=$PROJ_ID&limit=3" > /tmp/deps.json
-          URL=$(node -e "
-            const d=require('/tmp/deps.json');
-            const dep=d.deployments?.find(x=>x.state==='READY');
-            process.stdout.write(dep?'https://'+dep.url:'');
-          ")
-          echo "LIVE URL: $URL"
-          echo "$URL" > VERCEL_LIVE_URL.txt
-          git config user.email ci@v.com && git config user.name CI
-          git add VERCEL_LIVE_URL.txt
-          git diff --staged --quiet || (git commit -m "live: $URL [skip ci]" && git push origin main) || true
+          
+          PROJ_ID=$(node -e "const d=require('/tmp/projs.json');const p=d.projects?.find(x=>x.name==='vector-intelligence');process.stdout.write(p?.id||'NONE')")
+          echo "Project ID: $PROJ_ID"
+          
+          if [ "$PROJ_ID" != "NONE" ]; then
+            echo "=== DEPLOYMENTS ==="
+            curl -s -H "Authorization: Bearer $VT" "https://api.vercel.com/v6/deployments?projectId=$PROJ_ID&limit=10" > /tmp/deps.json
+            node -e "
+              const d=require('/tmp/deps.json');
+              (d.deployments||[]).forEach(dep=>console.log(dep.state, dep.url, new Date(dep.created).toISOString()));
+            "
+          fi
