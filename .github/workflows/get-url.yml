@@ -1,32 +1,44 @@
-name: Check Deployments
+name: Get Deploy Info
 
 on:
   workflow_dispatch:
 
 jobs:
-  check:
+  info:
     runs-on: ubuntu-latest
     steps:
-      - name: List all deployments
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GH_PAT }}
+
+      - name: Get deployment info
         run: |
           VT="${{ secrets.VERCEL_TOKEN }}"
+          curl -s -H "Authorization: Bearer $VT" "https://api.vercel.com/v9/projects?limit=20" > /tmp/p.json
+          node -e "const d=require('/tmp/p.json');(d.projects||[]).forEach(p=>console.log(p.id,p.name,p.alias?.map(a=>a.domain).join(',')))" > /tmp/proj_info.txt
+          cat /tmp/proj_info.txt
           
-          # List all projects
-          curl -s -H "Authorization: Bearer $VT" "https://api.vercel.com/v9/projects?limit=20" > /tmp/projs.json
-          echo "=== PROJECTS ==="
+          PROJ_ID=$(cat /tmp/proj_info.txt | grep vector-intelligence | awk '{print $1}')
+          echo "Project: $PROJ_ID"
+          
+          curl -s -H "Authorization: Bearer $VT" "https://api.vercel.com/v6/deployments?projectId=$PROJ_ID&limit=5" > /tmp/d.json
           node -e "
-            const d=require('/tmp/projs.json');
-            (d.projects||[]).forEach(p=>console.log(p.id, p.name));
-          "
+            const d=require('/tmp/d.json');
+            (d.deployments||[]).forEach(x=>{
+              const url='https://'+x.url;
+              console.log(x.state,url,x.created);
+            });
+          " > /tmp/dep_info.txt
+          cat /tmp/dep_info.txt
           
-          PROJ_ID=$(node -e "const d=require('/tmp/projs.json');const p=d.projects?.find(x=>x.name==='vector-intelligence');process.stdout.write(p?.id||'NONE')")
-          echo "Project ID: $PROJ_ID"
-          
-          if [ "$PROJ_ID" != "NONE" ]; then
-            echo "=== DEPLOYMENTS ==="
-            curl -s -H "Authorization: Bearer $VT" "https://api.vercel.com/v6/deployments?projectId=$PROJ_ID&limit=10" > /tmp/deps.json
-            node -e "
-              const d=require('/tmp/deps.json');
-              (d.deployments||[]).forEach(dep=>console.log(dep.state, dep.url, new Date(dep.created).toISOString()));
-            "
+          URL=$(cat /tmp/dep_info.txt | grep READY | head -1 | awk '{print $2}')
+          if [ -z "$URL" ]; then
+            URL=$(cat /tmp/dep_info.txt | head -1 | awk '{print $2}')
           fi
+          echo "URL: $URL"
+          echo "$URL" > VERCEL_LIVE_URL.txt
+          cat /tmp/proj_info.txt > VERCEL_PROJECT_INFO.txt
+          cat /tmp/dep_info.txt > VERCEL_DEPLOY_INFO.txt
+          git config user.email ci@v.com && git config user.name CI
+          git add VERCEL_LIVE_URL.txt VERCEL_PROJECT_INFO.txt VERCEL_DEPLOY_INFO.txt
+          git diff --staged --quiet || (git commit -m "info: deployment details [skip ci]" && git push origin main) || true
