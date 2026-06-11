@@ -20,41 +20,73 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
-          cache: 'npm'
+          node-version: 20
+          cache: npm
 
-      - name: Install
+      - name: Install deps
         run: npm ci --legacy-peer-deps
 
       - name: Install Vercel CLI
         run: npm install -g vercel@latest
 
-      - name: Clear old Vercel project config
+      - name: Create project and set env vars
         run: |
-          rm -rf .vercel
-          echo "Cleared .vercel"
+          # Get account info
+          USER=$(curl -s -H "Authorization: Bearer ${{ secrets.VERCEL_TOKEN }}" https://api.vercel.com/v2/user)
+          echo "Account: $(node -e "process.stdout.write(JSON.parse('$USER'.replace(/'/g,\"'\")).user?.username||'?')" 2>/dev/null || echo $USER | head -c 100)"
+          
+          # Create project if not exists
+          PROJ=$(curl -s -H "Authorization: Bearer ${{ secrets.VERCEL_TOKEN }}" "https://api.vercel.com/v9/projects/vector-intelligence")
+          PROJ_ID=$(node -e "try{const d=JSON.parse(process.argv[1]);process.stdout.write(d.id||'')}catch(e){}" "$PROJ" 2>/dev/null)
+          
+          if [ -z "$PROJ_ID" ]; then
+            echo "Creating project..."
+            CREATED=$(curl -s -X POST \
+              -H "Authorization: Bearer ${{ secrets.VERCEL_TOKEN }}" \
+              -H "Content-Type: application/json" \
+              -d '{"name":"vector-intelligence","framework":"nextjs"}' \
+              "https://api.vercel.com/v9/projects")
+            PROJ_ID=$(node -e "try{const d=JSON.parse(process.argv[1]);process.stdout.write(d.id||d.error?.message||'')}catch(e){}" "$CREATED" 2>/dev/null)
+          fi
+          echo "Project ID: $PROJ_ID"
+          echo "PROJ_ID=$PROJ_ID" >> $GITHUB_ENV
+          
+          # Get org ID
+          ORG_ID=$(curl -s -H "Authorization: Bearer ${{ secrets.VERCEL_TOKEN }}" \
+            "https://api.vercel.com/v9/projects/$PROJ_ID" | \
+            node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>{try{process.stdout.write(JSON.parse(d).accountId||'')}catch(e){}})" 2>/dev/null)
+          echo "Org ID: $ORG_ID"
+          
+          # Write .vercel/project.json
+          mkdir -p .vercel
+          echo "{\"projectId\":\"$PROJ_ID\",\"orgId\":\"$ORG_ID\"}" > .vercel/project.json
+          cat .vercel/project.json
+          
+          # Set env vars on project
+          for ENTRY in \
+            "NEXT_PUBLIC_SUPABASE_URL=https://xavkbjbgmuasfkliptsh.supabase.co" \
+            "GROQ_API_KEY=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" \
+            "NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhhdmtiamdtdWFzZmtsaXB0c2giLCJyb2xlIjoiYW5vbiIsImlhdCI6MTc0NjgxNTU5MiwiZXhwIjoyMDYyMzkxNTkyfQ.LMkYBBaSHNFUOm3ETy1N1PL60vVCj7kpORCBJ6mGf1M"; do
+            KEY="${ENTRY%%=*}"
+            VALUE="${ENTRY#*=}"
+            curl -s -X POST \
+              -H "Authorization: Bearer ${{ secrets.VERCEL_TOKEN }}" \
+              -H "Content-Type: application/json" \
+              -d "{\"key\":\"$KEY\",\"value\":\"$VALUE\",\"type\":\"plain\",\"target\":[\"production\",\"preview\",\"development\"]}" \
+              "https://api.vercel.com/v9/projects/$PROJ_ID/env" > /dev/null
+          done
+          echo "Env vars set"
 
       - name: Build
         run: npm run build
 
-      - name: Deploy to Vercel
+      - name: Deploy
         run: |
-          set +e
-          OUTPUT=$(vercel deploy --prod --yes --token=${{ secrets.VERCEL_TOKEN }} 2>&1)
-          EXIT=$?
-          echo "=== FULL OUTPUT ==="
+          OUTPUT=$(vercel deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }} 2>&1)
           echo "$OUTPUT"
-          echo "=== EXIT: $EXIT ==="
-          
-          URL=$(echo "$OUTPUT" | grep -oE 'https://[a-zA-Z0-9._-]+' | grep 'vercel' | grep -v 'inspect' | tail -1)
-          echo "URL: $URL"
-          
-          echo "$OUTPUT" > /tmp/vercel_output.txt
-          echo "$URL" > VERCEL_URL.txt
-          
-          git config user.email "ci@vector.com"
-          git config user.name "CI"
-          git add VERCEL_URL.txt
-          git diff --staged --quiet || (git commit -m "deploy: Vercel URL [skip ci]" && git push origin main)
-          
-          [ $EXIT -eq 0 ]
+          URL=$(echo "$OUTPUT" | grep -oE 'https://[a-zA-Z0-9._-]+\.vercel\.app' | grep -v inspect | tail -1)
+          echo "LIVE URL: $URL"
+          echo "$URL" > VERCEL_LIVE_URL.txt
+          git config user.email ci@v.com && git config user.name CI
+          git add VERCEL_LIVE_URL.txt
+          git diff --staged --quiet || (git commit -m "live: $URL [skip ci]" && git push origin main) || true
