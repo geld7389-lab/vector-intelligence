@@ -41,36 +41,35 @@ jobs:
             PROJ_ID=$(node -e "const d=require('/tmp/np.json');process.stdout.write(d.id||'')")
           fi
           echo "PROJ_ID=$PROJ_ID" >> $GITHUB_ENV
-          echo "Project: $PROJ_ID"
-          
-          # Get user ID for orgId
           curl -s -H "Authorization: Bearer $VT" "https://api.vercel.com/v2/user" > /tmp/user.json
           ORG_ID=$(node -e "const d=require('/tmp/user.json');process.stdout.write(d.user?.id||'')")
           echo "ORG_ID=$ORG_ID" >> $GITHUB_ENV
-          echo "OrgId: $ORG_ID"
+          echo "Project: $PROJ_ID | Org: $ORG_ID"
 
       - name: npm build
         run: npm run build
 
       - name: Deploy to Vercel
+        continue-on-error: true
         run: |
           VT="${{ secrets.VERCEL_TOKEN }}"
-          
-          # Write project.json with real IDs
           rm -rf .vercel && mkdir -p .vercel
           echo "{\"projectId\":\"$PROJ_ID\",\"orgId\":\"$ORG_ID\"}" > .vercel/project.json
           echo "project.json: $(cat .vercel/project.json)"
-          
-          # Deploy the prebuilt Next.js output
           OUTPUT=$(vercel deploy --prebuilt --prod --token="$VT" 2>&1)
-          echo "$OUTPUT"
-          
+          echo "$OUTPUT" > /tmp/vercel_out.txt
+          echo "=== OUTPUT ==="
+          cat /tmp/vercel_out.txt
           URL=$(echo "$OUTPUT" | grep -oE 'https://[a-zA-Z0-9._-]+\.vercel\.app' | grep -v inspect | tail -1)
-          if [ -z "$URL" ]; then
-            URL=$(echo "$OUTPUT" | grep -oE 'https://[^ ]+' | grep -v inspect | tail -1)
-          fi
           echo "URL: $URL"
           echo "$URL" > VERCEL_LIVE_URL.txt
+
+      - name: Save results
+        run: |
+          cp /tmp/vercel_out.txt VERCEL_OUTPUT.txt 2>/dev/null || echo "no output" > VERCEL_OUTPUT.txt
           git config user.email ci@v.com && git config user.name CI
-          git add VERCEL_LIVE_URL.txt
-          git diff --staged --quiet || (git commit -m "live: $URL [skip ci]" && git push origin main) || true
+          git add VERCEL_LIVE_URL.txt VERCEL_OUTPUT.txt
+          git diff --staged --quiet || (git commit -m "debug: vercel output [skip ci]" && git push origin main) || true
+          echo "=== Saved ==="
+          cat VERCEL_LIVE_URL.txt
+          cat VERCEL_OUTPUT.txt | head -30
