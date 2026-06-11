@@ -29,47 +29,41 @@ jobs:
       - name: Install Vercel CLI
         run: npm install -g vercel@latest
 
-      - name: Get or create project
+      - name: Setup project.json
         run: |
           VT="${{ secrets.VERCEL_TOKEN }}"
-          curl -s -H "Authorization: Bearer $VT" "https://api.vercel.com/v9/projects?limit=20" > /tmp/projs.json
-          PROJ_ID=$(node -e "const d=require('/tmp/projs.json');const p=d.projects?.find(x=>x.name==='vector-intelligence');process.stdout.write(p?.id||'')")
-          if [ -z "$PROJ_ID" ]; then
-            curl -s -X POST -H "Authorization: Bearer $VT" -H "Content-Type: application/json" \
-              -d '{"name":"vector-intelligence","framework":"nextjs"}' \
-              "https://api.vercel.com/v9/projects" > /tmp/np.json
-            PROJ_ID=$(node -e "const d=require('/tmp/np.json');process.stdout.write(d.id||'')")
-          fi
-          echo "PROJ_ID=$PROJ_ID" >> $GITHUB_ENV
-          curl -s -H "Authorization: Bearer $VT" "https://api.vercel.com/v2/user" > /tmp/user.json
-          ORG_ID=$(node -e "const d=require('/tmp/user.json');process.stdout.write(d.user?.id||'')")
-          echo "ORG_ID=$ORG_ID" >> $GITHUB_ENV
-          echo "Project: $PROJ_ID | Org: $ORG_ID"
+          
+          # Get user ID (orgId for personal accounts)
+          USER_ID=$(curl -s -H "Authorization: Bearer $VT" "https://api.vercel.com/v2/user" | node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>process.stdout.write(JSON.parse(d).user?.id||''))")
+          echo "User ID: $USER_ID"
+          
+          # Project ID from what we found
+          PROJ_ID="prj_X8Wum9saUBQ7LQlDTnnH32yYNpHz"
+          
+          rm -rf .vercel && mkdir -p .vercel
+          echo "{\"projectId\":\"$PROJ_ID\",\"orgId\":\"$USER_ID\"}" > .vercel/project.json
+          echo "project.json: $(cat .vercel/project.json)"
 
-      - name: npm build
+      - name: Build
         run: npm run build
 
-      - name: Deploy to Vercel
-        continue-on-error: true
+      - name: Deploy
         run: |
           VT="${{ secrets.VERCEL_TOKEN }}"
-          rm -rf .vercel && mkdir -p .vercel
-          echo "{\"projectId\":\"$PROJ_ID\",\"orgId\":\"$ORG_ID\"}" > .vercel/project.json
-          echo "project.json: $(cat .vercel/project.json)"
-          OUTPUT=$(vercel deploy --prebuilt --prod --token="$VT" 2>&1)
-          echo "$OUTPUT" > /tmp/vercel_out.txt
-          echo "=== OUTPUT ==="
-          cat /tmp/vercel_out.txt
-          URL=$(echo "$OUTPUT" | grep -oE 'https://[a-zA-Z0-9._-]+\.vercel\.app' | grep -v inspect | tail -1)
-          echo "URL: $URL"
+          vercel deploy --prebuilt --prod --token="$VT" 2>&1 | tee /tmp/out.txt
+          echo "Exit: $?"
+          cat /tmp/out.txt
+          URL=$(grep -oE 'https://[a-zA-Z0-9._-]+\.vercel\.app' /tmp/out.txt | grep -v inspect | tail -1)
+          echo "URL: [$URL]"
+          
+          if [ -z "$URL" ]; then
+            # Try getting from Vercel API
+            curl -s -H "Authorization: Bearer $VT" "https://api.vercel.com/v6/deployments?projectId=prj_X8Wum9saUBQ7LQlDTnnH32yYNpHz&limit=3" > /tmp/d.json
+            URL=$(node -e "const d=require('/tmp/d.json');const dep=d.deployments?.[0];process.stdout.write(dep?'https://'+dep.url:'')")
+            echo "API URL: [$URL]"
+          fi
+          
           echo "$URL" > VERCEL_LIVE_URL.txt
-
-      - name: Save results
-        run: |
-          cp /tmp/vercel_out.txt VERCEL_OUTPUT.txt 2>/dev/null || echo "no output" > VERCEL_OUTPUT.txt
           git config user.email ci@v.com && git config user.name CI
-          git add VERCEL_LIVE_URL.txt VERCEL_OUTPUT.txt
-          git diff --staged --quiet || (git commit -m "debug: vercel output [skip ci]" && git push origin main) || true
-          echo "=== Saved ==="
-          cat VERCEL_LIVE_URL.txt
-          cat VERCEL_OUTPUT.txt | head -30
+          git add VERCEL_LIVE_URL.txt
+          git diff --staged --quiet || (git commit -m "live: $URL [skip ci]" && git push origin main) || true
