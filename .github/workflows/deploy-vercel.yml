@@ -29,62 +29,47 @@ jobs:
       - name: Install Vercel CLI
         run: npm install -g vercel@latest
 
-      - name: Setup Vercel project
+      - name: Get or create project
         run: |
           VT="${{ secrets.VERCEL_TOKEN }}"
-          
-          # Get user/team info
-          echo "Checking account..."
-          curl -s -H "Authorization: Bearer $VT" "https://api.vercel.com/v2/user" > /tmp/user.json
-          node -e "
-            const d=require('/tmp/user.json');
-            console.log('User:', d.user?.username, d.user?.id);
-          "
-          
-          # List projects to find existing one
           curl -s -H "Authorization: Bearer $VT" "https://api.vercel.com/v9/projects?limit=20" > /tmp/projs.json
-          PROJ_ID=$(node -e "
-            const d=require('/tmp/projs.json');
-            const p=d.projects?.find(x=>x.name==='vector-intelligence');
-            process.stdout.write(p?.id||'');
-          ")
-          
+          PROJ_ID=$(node -e "const d=require('/tmp/projs.json');const p=d.projects?.find(x=>x.name==='vector-intelligence');process.stdout.write(p?.id||'')")
           if [ -z "$PROJ_ID" ]; then
-            echo "Creating project..."
-            curl -s -X POST \
-              -H "Authorization: Bearer $VT" \
-              -H "Content-Type: application/json" \
+            curl -s -X POST -H "Authorization: Bearer $VT" -H "Content-Type: application/json" \
               -d '{"name":"vector-intelligence","framework":"nextjs"}' \
-              "https://api.vercel.com/v9/projects" > /tmp/new_proj.json
-            cat /tmp/new_proj.json | head -c 200
-            PROJ_ID=$(node -e "const d=require('/tmp/new_proj.json');process.stdout.write(d.id||'')")
+              "https://api.vercel.com/v9/projects" > /tmp/np.json
+            PROJ_ID=$(node -e "const d=require('/tmp/np.json');process.stdout.write(d.id||'')")
           fi
+          echo "PROJ_ID=$PROJ_ID" >> $GITHUB_ENV
+          echo "Project: $PROJ_ID"
           
-          echo "Project ID: $PROJ_ID"
-          ORG_ID=$(node -e "
-            const d=require('/tmp/user.json');
-            process.stdout.write(d.user?.id||'');
-          ")
-          echo "Org ID: $ORG_ID"
-          
-          rm -rf .vercel
-          mkdir -p .vercel
-          node -e "
-            const fs=require('fs');
-            fs.writeFileSync('.vercel/project.json', JSON.stringify({projectId:'$PROJ_ID',orgId:'$ORG_ID'}));
-            console.log('Written:', fs.readFileSync('.vercel/project.json','utf8'));
-          "
+          # Get user ID for orgId
+          curl -s -H "Authorization: Bearer $VT" "https://api.vercel.com/v2/user" > /tmp/user.json
+          ORG_ID=$(node -e "const d=require('/tmp/user.json');process.stdout.write(d.user?.id||'')")
+          echo "ORG_ID=$ORG_ID" >> $GITHUB_ENV
+          echo "OrgId: $ORG_ID"
 
-      - name: Vercel build
-        run: vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
+      - name: npm build
+        run: npm run build
 
-      - name: Vercel deploy
+      - name: Deploy to Vercel
         run: |
           VT="${{ secrets.VERCEL_TOKEN }}"
+          
+          # Write project.json with real IDs
+          rm -rf .vercel && mkdir -p .vercel
+          echo "{\"projectId\":\"$PROJ_ID\",\"orgId\":\"$ORG_ID\"}" > .vercel/project.json
+          echo "project.json: $(cat .vercel/project.json)"
+          
+          # Deploy the prebuilt Next.js output
           OUTPUT=$(vercel deploy --prebuilt --prod --token="$VT" 2>&1)
           echo "$OUTPUT"
+          
           URL=$(echo "$OUTPUT" | grep -oE 'https://[a-zA-Z0-9._-]+\.vercel\.app' | grep -v inspect | tail -1)
-          echo "LIVE: $URL"
+          if [ -z "$URL" ]; then
+            URL=$(echo "$OUTPUT" | grep -oE 'https://[^ ]+' | grep -v inspect | tail -1)
+          fi
+          echo "URL: $URL"
           echo "$URL" > VERCEL_LIVE_URL.txt
           git config user.email ci@v.com && git config user.name CI
           git add VERCEL_LIVE_URL.txt
