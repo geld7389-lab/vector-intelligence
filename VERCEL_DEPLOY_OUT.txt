@@ -1,5 +1,25 @@
 Vercel CLI 54.12.2 (Node.js 20.20.2)
 Retrieving project…
 Deploying kabulanon94-3317/vector-intelligence
-Error: Hobby accounts are limited to daily cron jobs. This cron expression (*/2 * * * *) would run more than once per day. Upgrade to the Pro plan to unlock all Cron Jobs features on Vercel.
-Learn More: https://vercel.link/3Fpeeb1
+Uploading [--------------------] (0.0B/1.7MB)
+Uploading [=====---------------] (436.0KB/1.7MB)
+Uploading [==========----------] (866.8KB/1.7MB)
+Uploading [===============-----] (1.3MB/1.7MB)
+Uploading [====================] (1.7MB/1.7MB)
+  Inspect     https://vercel.com/khans-projects-015b3165/vector-intelligence/9x2m7GksuzXCSGBzLuyRmMfsFbK9
+▲ Production  https://vector-intelligence-emhpn3p12-khans-projects-015b3165.vercel.app
+https://vector-intelligence-emhpn3p12-khans-projects-015b3165.vercel.appBuilding…
+Building…
+Running build in Washington, D.C., USA (East) – iad1
+Build machine configuration: 2 cores, 8 GB
+Retrieving list of deployment files...
+Previous build caches not available.
+Downloading 257 deployment files...
+Using prebuilt build artifacts from .vercel/output
+Learn more: https://vercel.link/build-output-api
+Deploying outputs...
+[2K[1A[2K[G▲ Production  https://vector-intelligence-emhpn3p12-khans-projects-015b3165.vercel.app
+Completing…
+▲ Aliased     https://vector-intelligence-five.vercel.app
+
+✓ Ready in 12s
