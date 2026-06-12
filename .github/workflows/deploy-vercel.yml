@@ -37,22 +37,20 @@ jobs:
           echo "{\"projectId\":\"prj_X8Wum9saUBQ7LQlDTnnH32yYNpHz\",\"orgId\":\"$USER_ID\"}" > .vercel/project.json
           echo "project.json: $(cat .vercel/project.json)"
 
-      - name: Vercel build (creates .vercel/output)
+      - name: Vercel build
+        continue-on-error: true
         run: |
-          vercel build --prod --token=${{ secrets.VERCEL_TOKEN }} 2>&1
-          echo "--- .vercel/output exists: $(ls .vercel/output 2>/dev/null | head -5 || echo NO)"
+          vercel build --prod --token=${{ secrets.VERCEL_TOKEN }} 2>&1 | tee /tmp/build_out.txt
+          echo "Exit: $?"
+          echo "=== OUTPUT ==="
+          cat /tmp/build_out.txt
 
-      - name: Deploy prebuilt
+      - name: Save build output
         run: |
-          VT="${{ secrets.VERCEL_TOKEN }}"
-          OUTPUT=$(vercel deploy --prebuilt --prod --token="$VT" 2>&1)
-          echo "$OUTPUT"
-          URL=$(echo "$OUTPUT" | grep -oE 'https://[a-zA-Z0-9._-]+\.vercel\.app' | grep -v inspect | tail -1)
-          if [ -z "$URL" ]; then
-            URL=$(echo "$OUTPUT" | grep -oE 'https://[^ ]+' | grep -v inspect | tail -1)
-          fi
-          echo "LIVE URL: [$URL]"
-          echo "$URL" > VERCEL_LIVE_URL.txt
+          cp /tmp/build_out.txt VERCEL_BUILD_OUT.txt 2>/dev/null || echo "no output" > VERCEL_BUILD_OUT.txt
+          ls .vercel/ 2>/dev/null && echo "Has .vercel/" || echo "No .vercel/"
+          ls .vercel/output/ 2>/dev/null && echo "Has .vercel/output/" || echo "No .vercel/output/"
           git config user.email ci@v.com && git config user.name CI
-          git add VERCEL_LIVE_URL.txt
-          git diff --staged --quiet || (git commit -m "live: $URL [skip ci]" && git push origin main) || true
+          git add VERCEL_BUILD_OUT.txt
+          git diff --staged --quiet || (git commit -m "debug: build output [skip ci]" && git push origin main) || true
+          cat VERCEL_BUILD_OUT.txt
