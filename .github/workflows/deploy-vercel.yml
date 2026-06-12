@@ -32,37 +32,26 @@ jobs:
       - name: Setup project.json
         run: |
           VT="${{ secrets.VERCEL_TOKEN }}"
-          
-          # Get user ID (orgId for personal accounts)
           USER_ID=$(curl -s -H "Authorization: Bearer $VT" "https://api.vercel.com/v2/user" | node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>process.stdout.write(JSON.parse(d).user?.id||''))")
-          echo "User ID: $USER_ID"
-          
-          # Project ID from what we found
-          PROJ_ID="prj_X8Wum9saUBQ7LQlDTnnH32yYNpHz"
-          
           rm -rf .vercel && mkdir -p .vercel
-          echo "{\"projectId\":\"$PROJ_ID\",\"orgId\":\"$USER_ID\"}" > .vercel/project.json
+          echo "{\"projectId\":\"prj_X8Wum9saUBQ7LQlDTnnH32yYNpHz\",\"orgId\":\"$USER_ID\"}" > .vercel/project.json
           echo "project.json: $(cat .vercel/project.json)"
 
-      - name: Build
-        run: npm run build
+      - name: Vercel build (creates .vercel/output)
+        run: |
+          vercel build --prod --token=${{ secrets.VERCEL_TOKEN }} 2>&1
+          echo "--- .vercel/output exists: $(ls .vercel/output 2>/dev/null | head -5 || echo NO)"
 
-      - name: Deploy
+      - name: Deploy prebuilt
         run: |
           VT="${{ secrets.VERCEL_TOKEN }}"
-          vercel deploy --prebuilt --prod --token="$VT" 2>&1 | tee /tmp/out.txt
-          echo "Exit: $?"
-          cat /tmp/out.txt
-          URL=$(grep -oE 'https://[a-zA-Z0-9._-]+\.vercel\.app' /tmp/out.txt | grep -v inspect | tail -1)
-          echo "URL: [$URL]"
-          
+          OUTPUT=$(vercel deploy --prebuilt --prod --token="$VT" 2>&1)
+          echo "$OUTPUT"
+          URL=$(echo "$OUTPUT" | grep -oE 'https://[a-zA-Z0-9._-]+\.vercel\.app' | grep -v inspect | tail -1)
           if [ -z "$URL" ]; then
-            # Try getting from Vercel API
-            curl -s -H "Authorization: Bearer $VT" "https://api.vercel.com/v6/deployments?projectId=prj_X8Wum9saUBQ7LQlDTnnH32yYNpHz&limit=3" > /tmp/d.json
-            URL=$(node -e "const d=require('/tmp/d.json');const dep=d.deployments?.[0];process.stdout.write(dep?'https://'+dep.url:'')")
-            echo "API URL: [$URL]"
+            URL=$(echo "$OUTPUT" | grep -oE 'https://[^ ]+' | grep -v inspect | tail -1)
           fi
-          
+          echo "LIVE URL: [$URL]"
           echo "$URL" > VERCEL_LIVE_URL.txt
           git config user.email ci@v.com && git config user.name CI
           git add VERCEL_LIVE_URL.txt
