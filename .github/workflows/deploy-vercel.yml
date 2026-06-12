@@ -35,7 +35,6 @@ jobs:
           USER_ID=$(curl -s -H "Authorization: Bearer $VT" https://api.vercel.com/v2/user | node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>process.stdout.write(JSON.parse(d).user?.id||''))")
           echo "VERCEL_ORG_ID=$USER_ID" >> $GITHUB_ENV
           echo "VERCEL_PROJECT_ID=prj_X8Wum9saUBQ7LQlDTnnH32yYNpHz" >> $GITHUB_ENV
-          echo "User ID (orgId): $USER_ID"
 
       - name: Pull Vercel settings
         run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
@@ -45,11 +44,18 @@ jobs:
 
       - name: Deploy
         run: |
-          OUTPUT=$(vercel deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }} 2>&1)
+          VT="${{ secrets.VERCEL_TOKEN }}"
+          set +e
+          OUTPUT=$(vercel deploy --prebuilt --prod --token="$VT" 2>&1)
+          EXIT=$?
+          echo "=== DEPLOY OUTPUT (exit $EXIT) ==="
           echo "$OUTPUT"
+          echo "==================================="
           URL=$(echo "$OUTPUT" | grep -oE 'https://[a-zA-Z0-9._-]+\.vercel\.app' | grep -v inspect | tail -1)
-          echo "URL: $URL"
+          echo "URL: [$URL]"
+          echo "$OUTPUT" > VERCEL_DEPLOY_OUT.txt
           echo "$URL" > VERCEL_LIVE_URL.txt
           git config user.email ci@v.com && git config user.name CI
-          git add VERCEL_LIVE_URL.txt
-          git diff --staged --quiet || (git commit -m "live: $URL [skip ci]" && git push origin main) || true
+          git add VERCEL_DEPLOY_OUT.txt VERCEL_LIVE_URL.txt
+          git diff --staged --quiet || (git commit -m "debug: deploy output [skip ci]" && git push origin main) || true
+          exit $EXIT
