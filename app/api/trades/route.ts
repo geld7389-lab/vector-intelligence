@@ -14,7 +14,7 @@ function detectSession(): string {
 }
 
 export async function GET() {
-  const { data, error } = await sb
+  const { data, error } = await supabase
     .from('trades')
     .select('*')
     .order('opened_at', { ascending: false })
@@ -61,7 +61,7 @@ export async function POST(req: NextRequest) {
   const meta = JSON.stringify({ risk_dollars, setup_type, timeframe, session, mistakes, pnl_dollars: null });
   const fullNotes = notes ? `${notes}__META__${meta}` : `__META__${meta}`;
 
-  const { data, error } = await sb.from('trades').insert({
+  const { data, error } = await supabase.from('trades').insert({
     symbol,
     direction: dbDir,
     entry_price,
@@ -80,7 +80,7 @@ export async function POST(req: NextRequest) {
 export async function PATCH(req: NextRequest) {
   const { id, exit_price, notes: newNotes = '', mistakes = [] } = await req.json();
 
-  const { data: existing } = await sb.from('trades').select('*').eq('id', id).single();
+  const { data: existing } = await supabase.from('trades').select('*').eq('id', id).single();
   if (!existing) return NextResponse.json({ error: 'Trade not found' }, { status: 404 });
 
   let existingMeta: any = {};
@@ -97,7 +97,7 @@ export async function PATCH(req: NextRequest) {
   const existingNoteText = existing.notes?.split('__META__')[0] ?? '';
   const combinedNotes = newNotes ? `${newNotes}__META__${meta}` : existingNoteText ? `${existingNoteText}__META__${meta}` : `__META__${meta}`;
 
-  const { data, error } = await sb.from('trades').update({
+  const { data, error } = await supabase.from('trades').update({
     result,
     rr_achieved: rr,
     notes: combinedNotes,
@@ -123,7 +123,7 @@ export async function PATCH(req: NextRequest) {
 
 export async function DELETE(req: NextRequest) {
   const { id } = await req.json();
-  const { error } = await sb.from('trades').delete().eq('id', id);
+  const { error } = await supabase.from('trades').delete().eq('id', id);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ ok: true });
 }
