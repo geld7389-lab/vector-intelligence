@@ -25,11 +25,11 @@ async function sendTelegram(token: string, chatId: string, text: string) {
 export async function GET() {
   try {
     // Get Telegram config
-    const { data: cfg } = await sb.from('telegram_config').select('*').eq('id',1).single();
+    const { data: cfg } = await supabase.from('telegram_config').select('*').eq('id',1).single();
     if (!cfg?.bot_token || !cfg?.chat_id || !cfg?.active) return NextResponse.json({ ok:true, skipped:'no config' });
 
     // Get open trades
-    const { data: trades } = await sb.from('trades').select('*').eq('result','open');
+    const { data: trades } = await supabase.from('trades').select('*').eq('result','open');
     if (!trades?.length) return NextResponse.json({ ok:true, checked:0 });
 
     const fired: string[] = [];
@@ -60,7 +60,7 @@ export async function GET() {
 
     // Check setups entry zones
     if (cfg.alert_entry) {
-      const { data: setups } = await sb.from('setups').select('*').eq('status','watching');
+      const { data: setups } = await supabase.from('setups').select('*').eq('status','watching');
       for (const s of (setups??[])) {
         const p = prices[s.symbol] ?? await getPrice(s.symbol);
         if (p == null) continue;
