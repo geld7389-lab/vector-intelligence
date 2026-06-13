@@ -34,108 +34,28 @@ $ npm run build
    Creating an optimized production build ...
  ✓ Compiled successfully
    Linting and checking validity of types ...
-   Collecting page data ...
-   Generating static pages (0/7) ...
-   Generating static pages (1/7) 
-   Generating static pages (3/7) 
-   Generating static pages (5/7) 
- ✓ Generating static pages (7/7)
-   Finalizing page optimization ...
-   Collecting build traces ...
+Failed to compile.
 
-Route (app)                              Size     First Load JS
-┌ ○ /                                    74.4 kB         161 kB
-├ ○ /_not-found                          871 B          87.9 kB
-├ ƒ /api/analytics                       0 B                0 B
-├ ƒ /api/analyze                         0 B                0 B
-├ ƒ /api/autoscan                        0 B                0 B
-├ ƒ /api/backtest                        0 B                0 B
-├ ƒ /api/calendar                        0 B                0 B
-├ ƒ /api/candles                         0 B                0 B
-├ ƒ /api/cot                             0 B                0 B
-├ ƒ /api/crypto                          0 B                0 B
-├ ƒ /api/deepbacktest                    0 B                0 B
-├ ƒ /api/drawings                        0 B                0 B
-├ ƒ /api/forex                           0 B                0 B
-├ ƒ /api/health                          0 B                0 B
-├ ƒ /api/killzone                        0 B                0 B
-├ ƒ /api/knowledge                       0 B                0 B
-├ ƒ /api/market                          0 B                0 B
-├ ƒ /api/migrate                         0 B                0 B
-├ ƒ /api/monitor                         0 B                0 B
-├ ƒ /api/news                            0 B                0 B
-├ ƒ /api/newsfeed                        0 B                0 B
-├ ƒ /api/prices                          0 B                0 B
-├ ƒ /api/scanner                         0 B                0 B
-├ ƒ /api/setups                          0 B                0 B
-├ ƒ /api/smt                             0 B                0 B
-├ ƒ /api/stocks                          0 B                0 B
-├ ƒ /api/telegram                        0 B                0 B
-├ ƒ /api/trades                          0 B                0 B
-├ ƒ /api/transcribe                      0 B                0 B
-├ ƒ /api/tv-webhook                      0 B                0 B
-└ ƒ /api/weekbias                        0 B                0 B
-+ First Load JS shared by all            87 kB
-  ├ chunks/23-689eda8e83791f79.js        31.5 kB
-  ├ chunks/fd9d1056-23bdddb1df3a91c8.js  53.6 kB
-  └ other shared chunks (total)          1.92 kB
+./app/api/analytics/route.ts:8:39
+Type error: Cannot find name 'sb'.
 
-
-○  (Static)   prerendered as static content
-ƒ  (Dynamic)  server-rendered on demand
-
+[0m [90m  6 |[39m[0m
+[0m [90m  7 |[39m [36mexport[39m [36masync[39m [36mfunction[39m [33mGET[39m() {[0m
+[0m[31m[1m>[22m[39m[90m  8 |[39m   [36mconst[39m { data[33m:[39m rows[33m,[39m error } [33m=[39m [36mawait[39m sb[0m
+[0m [90m    |[39m                                       [31m[1m^[22m[39m[0m
+[0m [90m  9 |[39m     [33m.[39m[36mfrom[39m([32m'trades'[39m)[0m
+[0m [90m 10 |[39m     [33m.[39mselect([32m'*'[39m)[0m
+[0m [90m 11 |[39m     [33m.[39mneq([32m'result'[39m[33m,[39m [32m'open'[39m)[0m
 ​
-(build.command completed in 30.1s)
-​
-Functions bundling                                            
-────────────────────────────────────────────────────────────────
-​
-Packaging Functions from .netlify/functions-internal directory:
- - ___netlify-server-handler/___netlify-server-handler.mjs
-​
-​
-(Functions bundling completed in 1.4s)
-Deploy path:        /home/runner/work/vector-intelligence/vector-intelligence/.next
-Configuration path: /home/runner/work/vector-intelligence/vector-intelligence/netlify.toml
-Deploying to main site URL...
- ›   Warning: JSONHTTPError:  403
- ›   Warning: 
-{
-  "name": "JSONHTTPError",
-  "status": 403,
-  "json": {
-    "error": "Account credit usage exceeded - new deploys are blocked until credits are added"
-  }
-}
-
-​
-Internal error during "options.onPostBuild"                   
+"build.command" failed                                        
 ────────────────────────────────────────────────────────────────
 ​
   Error message
-  JSONHTTPError: Forbidden
+  Command failed with exit code 1: npm run build
 ​
   Error location
-  During options.onPostBuild
-      at parseResponse (file:///opt/hostedtoolcache/node/20.20.2/x64/lib/node_modules/netlify-cli/node_modules/netlify/lib/methods/response.js:10:39)
-      at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
-      at async callMethod (file:///opt/hostedtoolcache/node/20.20.2/x64/lib/node_modules/netlify-cli/node_modules/netlify/lib/methods/index.js:26:28)
-      at async runDeploy (file:///opt/hostedtoolcache/node/20.20.2/x64/lib/node_modules/netlify-cli/dist/commands/deploy/deploy.js:356:19)
-      at async prepAndRunDeploy (file:///opt/hostedtoolcache/node/20.20.2/x64/lib/node_modules/netlify-cli/dist/commands/deploy/deploy.js:603:21)
-      at async deployHandler (file:///opt/hostedtoolcache/node/20.20.2/x64/lib/node_modules/netlify-cli/dist/commands/deploy/deploy.js:688:27)
-      at async fireCoreStep (file:///opt/hostedtoolcache/node/20.20.2/x64/lib/node_modules/netlify-cli/node_modules/@netlify/build/lib/steps/core_step.js:11:98)
-      at async tFireStep (file:///opt/hostedtoolcache/node/20.20.2/x64/lib/node_modules/netlify-cli/node_modules/@netlify/build/lib/time/main.js:18:63)
-      at async file:///opt/hostedtoolcache/node/20.20.2/x64/lib/node_modules/netlify-cli/node_modules/@netlify/build/lib/steps/run_step.js:69:283
-      at async pReduce.index (file:///opt/hostedtoolcache/node/20.20.2/x64/lib/node_modules/netlify-cli/node_modules/@netlify/build/lib/steps/run_steps.js:12:349)
-​
-  Error properties
-  {
-    name: [32m'JSONHTTPError'[39m,
-    status: [33m403[39m,
-    json: {
-      error: [32m'Account credit usage exceeded - new deploys are blocked until credits are added'[39m
-    }
-  }
+  In build.command from netlify.toml:
+  npm run build
 ​
   Resolved config
   build:
@@ -152,28 +72,7 @@ Internal error during "options.onPostBuild"
   functions:
     '*':
       node_bundler: esbuild
-  headers:
-    - for: /_next/static/*
-      values:
-        Cache-Control: public, max-age=31536000, immutable
-  headersOrigin: inline
   plugins:
     - inputs: {}
       origin: config
       package: '@netlify/plugin-nextjs'
-  redirects:
-    - from: /_next/image
-      query:
-        q: ':quality'
-        url: ':url'
-        w: ':width'
-      status: 200
-      to: /.netlify/images?url=:url&w=:width&q=:quality
-    - from: /_ipx/*
-      query:
-        q: ':quality'
-        url: ':url'
-        w: ':width'
-      status: 200
-      to: /.netlify/images?url=:url&w=:width&q=:quality
-  redirectsOrigin: inline
