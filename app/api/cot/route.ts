@@ -53,7 +53,7 @@ async function fetchCOT(symbol: string) {
 
 export async function GET(req: NextRequest) {
   const symbol = req.nextUrl.searchParams.get('symbol') ?? 'NQ';
-  const { data:cached } = await sb.from('cot_data').select('*').eq('symbol',symbol).order('report_date',{ascending:false}).limit(20);
+  const { data:cached } = await supabase.from('cot_data').select('*').eq('symbol',symbol).order('report_date',{ascending:false}).limit(20);
   if (cached&&cached.length>0) {
     const daysSince=(Date.now()-new Date(cached[0].report_date).getTime())/(1000*60*60*24);
     if (daysSince<7) {
@@ -64,6 +64,6 @@ export async function GET(req: NextRequest) {
   const fresh = await fetchCOT(symbol.replace('USD','').replace('EURUSD','EUR').replace('GBPUSD','GBP'));
   if (!fresh||!fresh.length) return NextResponse.json({ symbol, data:cached??[], source:'cache_fallback', latest:cached?.[0]??null, interpretation:interpretCOT(cached??[]) });
   const rows = fresh.map((r:any)=>({ symbol, report_date:r.date, ...r }));
-  await sb.from('cot_data').upsert(rows,{onConflict:'report_date,symbol'});
+  await supabase.from('cot_data').upsert(rows,{onConflict:'report_date,symbol'});
   return NextResponse.json({ symbol, data:fresh, source:'cftc_live', latest:fresh[0], interpretation:interpretCOT(fresh) });
 }
