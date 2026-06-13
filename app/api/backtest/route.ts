@@ -66,7 +66,7 @@ function runBacktest(candles: any[], direction: string) {
 
 export async function GET() {
   try {
-    const { data } = await sb.from('backtest_runs').select('*').order('created_at',{ascending:false}).limit(20);
+    const { data } = await supabase.from('backtest_runs').select('*').order('created_at',{ascending:false}).limit(20);
     return NextResponse.json({ runs: data ?? [] });
   } catch { return NextResponse.json({ runs: [] }); }
 }
@@ -105,7 +105,7 @@ export async function POST(req: NextRequest) {
   };
 
   try {
-    await sb.from('backtest_runs').insert(run);
+    await supabase.from('backtest_runs').insert(run);
   } catch {}
 
   return NextResponse.json({ run });
