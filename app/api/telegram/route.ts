@@ -4,8 +4,8 @@ export const dynamic = 'force-dynamic';
 
 export async function POST(req: NextRequest) {
   const { type, botToken, chatId, message } = await req.json();
-  const token = botToken || (await sb.from('telegram_config').select('bot_token,chat_id').eq('id',1).single()).data?.bot_token;
-  const chat = chatId || (await sb.from('telegram_config').select('bot_token,chat_id').eq('id',1).single()).data?.chat_id;
+  const token = botToken || (await supabase.from('telegram_config').select('bot_token,chat_id').eq('id',1).single()).data?.bot_token;
+  const chat = chatId || (await supabase.from('telegram_config').select('bot_token,chat_id').eq('id',1).single()).data?.chat_id;
   if (!token || !chat) return NextResponse.json({ error:'No config' },{status:400});
   const text = type==='test' ? '✅ <b>VECTOR Intelligence</b>\nTelegram alerts are working!' : (message ?? 'Alert from VECTOR');
   const r = await fetch(`https://api.telegram.org/bot${token}/sendMessage`,{
