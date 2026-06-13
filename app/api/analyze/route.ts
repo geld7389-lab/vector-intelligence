@@ -11,14 +11,14 @@ export async function POST(req: NextRequest) {
     const { setup, prices } = await req.json();
 
     // 1. Pull ICT knowledge base context
-    const { data: kbRows } = await sb.from('knowledge_base').select('title,content').limit(12);
+    const { data: kbRows } = await supabase.from('knowledge_base').select('title,content').limit(12);
     const kbContext = (kbRows ?? []).map((r: any) => `[${r.title}] ${r.content?.slice(0,220)}`).join('\n');
 
     // 2. Pull COT data for symbol
     const cotSym = ['NQ','ES','EURUSD','GBPUSD','GC','CL'].includes(setup.symbol?.split('-')[0]) ? setup.symbol : null;
     let cotContext = '';
     if (cotSym) {
-      const { data: cotRows } = await sb.from('cot_data').select('*').eq('symbol', cotSym.replace('USD','').replace('EURUSD','EUR').replace('GBPUSD','GBP')).order('report_date',{ascending:false}).limit(1);
+      const { data: cotRows } = await supabase.from('cot_data').select('*').eq('symbol', cotSym.replace('USD','').replace('EURUSD','EUR').replace('GBPUSD','GBP')).order('report_date',{ascending:false}).limit(1);
       if (cotRows && cotRows[0]) {
         const c = cotRows[0];
         const commAligned = (setup.direction==='bull'&&c.comm_net>0)||(setup.direction==='bear'&&c.comm_net<0);
@@ -27,14 +27,14 @@ export async function POST(req: NextRequest) {
     }
 
     // 3. Pull SMT signals (last 4 hours)
-    const { data: smtRows } = await sb.from('smt_signals').select('*').gte('detected_at', new Date(Date.now()-4*60*60*1000).toISOString()).order('detected_at',{ascending:false}).limit(3);
+    const { data: smtRows } = await supabase.from('smt_signals').select('*').gte('detected_at', new Date(Date.now()-4*60*60*1000).toISOString()).order('detected_at',{ascending:false}).limit(3);
     let smtContext = '';
     if (smtRows && smtRows.length > 0) {
       smtContext = `\nSMT DIVERGENCE (recent): ${smtRows.map((s:any)=>`${s.divergence_type} (NQ vs ES, ${new Date(s.detected_at).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})} NY)`).join('; ')}\n`;
     }
 
     // 4. Pull weekly bias
-    const { data: biasRow } = await sb.from('weekly_bias').select('*').eq('symbol', setup.symbol).order('created_at',{ascending:false}).limit(1).single();
+    const { data: biasRow } = await supabase.from('weekly_bias').select('*').eq('symbol', setup.symbol).order('created_at',{ascending:false}).limit(1).single();
     const biasContext = biasRow ? `\nWEEKLY BIAS: ${setup.symbol} ${biasRow.bias?.toUpperCase()} | Key levels: ${biasRow.key_levels ?? 'not set'} | Reasoning: ${biasRow.reasoning ?? ''}\n` : '';
 
     // 5. Current prices context
@@ -77,7 +77,7 @@ Be direct and specific. Use ICT terminology.`;
     const analysis = data.choices?.[0]?.message?.content ?? 'No analysis returned';
 
     // Cache the analysis on the setup
-    await sb.from('setups').update({ ai_analysis: analysis }).eq('id', setup.id);
+    await supabase.from('setups').update({ ai_analysis: analysis }).eq('id', setup.id);
 
     return NextResponse.json({ analysis });
   } catch (err) {
