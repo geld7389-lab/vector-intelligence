@@ -5,7 +5,7 @@ export const dynamic = 'force-dynamic';
 
 
 export async function GET() {
-  const { data: rows, error } = await sb
+  const { data: rows, error } = await supabase
     .from('trades')
     .select('*')
     .neq('result', 'open')
