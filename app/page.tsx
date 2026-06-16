@@ -1143,11 +1143,11 @@ function TelegramSettings({ onClose }: { onClose: ()=>void }) {
   const [alerts, setAlerts] = useState({ sl:true, entry:true, tp:true, scan:true });
   useEffect(()=>{
     sb.from('telegram_config').select('*').single().then(({data})=>{
-      if(data){ setToken(data.bot_token??''); setChatId(data.chat_id??''); setAlerts(data.alert_types??{sl:true,entry:true,tp:true,scan:true}); }
+      if(data){ setToken(data.bot_token??''); setChatId(data.chat_id??''); setAlerts({ sl:data.alert_sl??true, entry:data.alert_entry??true, tp:data.alert_tp??true, scan:true }); }
     });
   },[]);
   const save = async ()=>{
-    await sb.from('telegram_config').upsert({ id:1, bot_token:token, chat_id:chatId, alert_types:alerts, active:true, alert_sl:alerts.sl, alert_entry:alerts.entry, alert_tp:alerts.tp, alert_scan:alerts.scan, updated_at:new Date().toISOString() },{ onConflict:'id' });
+    await sb.from('telegram_config').upsert({ id:1, bot_token:token, chat_id:chatId, active:true, alert_sl:alerts.sl, alert_entry:alerts.entry, alert_tp:alerts.tp, updated_at:new Date().toISOString() },{ onConflict:'id' });
     setSaved(true); setTimeout(()=>setSaved(false),2000);
   };
   const test = async ()=>{
