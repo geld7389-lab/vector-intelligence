@@ -8,18 +8,9 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    env:
-      NEXT_PUBLIC_SUPABASE_URL: https://xavkbjbgmuasfkliptsh.supabase.co
-      NEXT_PUBLIC_SUPABASE_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhhdmtiamJnbXVhc2ZrbGlwdHNoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzgzNTAzOTIsImV4cCI6MjA5MzkyNjM5Mn0.GJgxNwP6LfphbHTijGhrHK5DMpDcarJin2bVmoxU4bo
-      GROQ_API_KEY: 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
-      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-      VERCEL_PROJECT_ID: prj_X8Wum9saUBQ7LQlDTnnH32yYNpHz
 
     steps:
       - uses: actions/checkout@v4
-        with:
-          token: ${{ secrets.GH_PAT }}
 
       - uses: actions/setup-node@v4
         with:
@@ -29,20 +20,22 @@ jobs:
       - name: Install deps
         run: npm ci --legacy-peer-deps
 
-      - name: Install Vercel CLI
-        run: npm install -g vercel@latest
-
-      - name: Pull Vercel settings
-        run: vercel pull --yes --environment=production --token=$VERCEL_TOKEN
-
       - name: Build
-        run: vercel build --prod --token=$VERCEL_TOKEN
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: https://xavkbjbgmuasfkliptsh.supabase.co
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhhdmtiamJnbXVhc2ZrbGlwdHNoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzgzNTAzOTIsImV4cCI6MjA5MzkyNjM5Mn0.GJgxNwP6LfphbHTijGhrHK5DMpDcarJin2bVmoxU4bo
+          GROQ_API_KEY: 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
+        run: npx next build
 
-      - name: Deploy
+      - name: Deploy to Vercel
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
         run: |
-          URL=$(vercel deploy --prebuilt --prod --token=$VERCEL_TOKEN 2>&1 | grep -oE 'https://[a-zA-Z0-9._-]+\.vercel\.app' | grep -v inspect | tail -1)
-          echo "Deployed to: $URL"
-          echo "$URL" > VERCEL_LIVE_URL.txt
-          git config user.email ci@v.com && git config user.name CI
-          git add VERCEL_LIVE_URL.txt
-          git diff --staged --quiet || git commit -m "chore: update live URL [skip ci]" && git push origin main || true
+          npm install -g vercel@latest
+          vercel deploy --prebuilt --prod \
+            --token=$VERCEL_TOKEN \
+            --scope=geld7389-lab \
+            -e NEXT_PUBLIC_SUPABASE_URL=https://xavkbjbgmuasfkliptsh.supabase.co \
+            -e NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhhdmtiamJnbXVhc2ZrbGlwdHNoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzgzNTAzOTIsImV4cCI6MjA5MzkyNjM5Mn0.GJgxNwP6LfphbHTijGhrHK5DMpDcarJin2bVmoxU4bo \
+            -e GROQ_API_KEY=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 2>&1 | tee /tmp/deploy.log
+          grep -oE 'https://[a-zA-Z0-9._-]+\.vercel\.app' /tmp/deploy.log | grep -v inspect | tail -1
