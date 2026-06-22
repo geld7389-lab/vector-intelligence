@@ -5,10 +5,6 @@ on:
     branches: [main]
   workflow_dispatch:
 
-env:
-  VERCEL_ORG_ID: team_4K6zNXa5SgKXnomXu9yP9xge
-  VERCEL_PROJECT_ID: prj_X8Wum9saUBQ7LQlDTnnH32yYNpHz
-
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -23,16 +19,11 @@ jobs:
       - name: Install deps
         run: npm ci --legacy-peer-deps
 
-      - name: Build
-        env:
-          NEXT_PUBLIC_SUPABASE_URL: https://xavkbjbgmuasfkliptsh.supabase.co
-          NEXT_PUBLIC_SUPABASE_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhhdmtiamJnbXVhc2ZrbGlwdHNoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzgzNTAzOTIsImV4cCI6MjA5MzkyNjM5Mn0.GJgxNwP6LfphbHTijGhrHK5DMpDcarJin2bVmoxU4bo
-          GROQ_API_KEY: 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
-        run: npx next build
-
-      - name: Deploy
-        env:
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-        run: |
-          npm i -g vercel@latest
-          vercel deploy --prebuilt --prod --token=$VERCEL_TOKEN
+      - name: Deploy to Vercel
+        uses: amondnet/vercel-action@v25
+        with:
+          vercel-token: ${{ secrets.VERCEL_TOKEN }}
+          vercel-org-id: team_4K6zNXa5SgKXnomXu9yP9xge
+          vercel-project-id: prj_X8Wum9saUBQ7LQlDTnnH32yYNpHz
+          vercel-args: '--prod'
+          working-directory: ./
