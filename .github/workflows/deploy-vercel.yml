@@ -26,9 +26,6 @@ jobs:
       - name: Install Vercel CLI
         run: npm i -g vercel@latest
 
-      - name: Pull Vercel env
-        run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
-
       - name: Build
         env:
           NEXT_PUBLIC_SUPABASE_URL: https://xavkbjbgmuasfkliptsh.supabase.co
