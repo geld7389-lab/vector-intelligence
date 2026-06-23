@@ -39,18 +39,28 @@ $ npm run build
  ✓ Compiled successfully
    Linting and checking validity of types ...
    Collecting page data ...
-   Generating static pages (0/8) ...
-   Generating static pages (2/8) 
-   Generating static pages (4/8) 
-   Generating static pages (6/8) 
- ✓ Generating static pages (8/8)
+   Generating static pages (0/7) ...
+   Generating static pages (1/7) 
+   Generating static pages (3/7) 
+   Generating static pages (5/7) 
+ ✓ Generating static pages (7/7)
    Finalizing page optimization ...
    Collecting build traces ...
 
 Route (app)                              Size     First Load JS
-┌ ○ /                                    76.8 kB         164 kB
+┌ ○ /                                    77.2 kB         164 kB
 ├ ○ /_not-found                          871 B          87.9 kB
-├ ○ /api/agents/status                   0 B                0 B
+├ ƒ /api/agents/ai-brain                 0 B                0 B
+├ ƒ /api/agents/alerts                   0 B                0 B
+├ ƒ /api/agents/macro                    0 B                0 B
+├ ƒ /api/agents/market-structure         0 B                0 B
+├ ƒ /api/agents/orchestrator             0 B                0 B
+├ ƒ /api/agents/risk                     0 B                0 B
+├ ƒ /api/agents/run                      0 B                0 B
+├ ƒ /api/agents/self-learning            0 B                0 B
+├ ƒ /api/agents/smc                      0 B                0 B
+├ ƒ /api/agents/status                   0 B                0 B
+├ ƒ /api/agents/technical                0 B                0 B
 ├ ƒ /api/analytics                       0 B                0 B
 ├ ƒ /api/analyze                         0 B                0 B
 ├ ƒ /api/autoscan                        0 B                0 B
@@ -90,7 +100,7 @@ Route (app)                              Size     First Load JS
 ƒ  (Dynamic)  server-rendered on demand
 
 ​
-(build.command completed in 27.7s)
+(build.command completed in 26.8s)
 ​
 Functions bundling                                            
 ────────────────────────────────────────────────────────────────
@@ -99,7 +109,7 @@ Packaging Functions from .netlify/functions-internal directory:
  - ___netlify-server-handler/___netlify-server-handler.mjs
 ​
 ​
-(Functions bundling completed in 1.3s)
+(Functions bundling completed in 1.2s)
 Deploy path:        /home/runner/work/vector-intelligence/vector-intelligence/.next
 Configuration path: /home/runner/work/vector-intelligence/vector-intelligence/netlify.toml
 Deploying to main site URL...
