@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import dynamic from 'next/dynamic';
 
@@ -8,7 +8,7 @@ const sb = createClient(
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhhdmtiamJnbXVhc2ZrbGlwdHNoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzgzNTAzOTIsImV4cCI6MjA5MzkyNjM5Mn0.GJgxNwP6LfphbHTijGhrHK5DMpDcarJin2bVmoxU4bo'
 );
 
-type Tab = 'Markets'|'Setups'|'Trades'|'Analytics'|'Journal'|'Knowledge'|'Backtest';
+type Tab = 'Markets'|'Setups'|'Trades'|'Analytics'|'Journal'|'Knowledge'|'Backtest'|'Agents';
 type MkTab = 'Futures'|'Crypto'|'Forex'|'Stocks'|'Institutional';
 type Prices = { NQ:number|null; ES:number|null; GC:number|null; DXY:number|null; VIX:number|null };
 
@@ -996,6 +996,213 @@ function KnowledgeTab() {
 }
 
 // ── BACKTEST TAB (with history) ────────────────
+// ─── AGENTS TAB ──────────────────────────────────────────────────────────────
+function AgentsTab() {
+  const [data, setData] = React.useState<any>(null);
+  const [loading, setLoading] = React.useState(true);
+  const [err, setErr] = React.useState('');
+
+  const AGENT_DEFS = [
+    { key:'orchestrator', name:'Master Orchestrator', icon:'⚡', desc:'Coordinates all agents, final trade veto' },
+    { key:'market_structure', name:'Market Structure', icon:'📐', desc:'BOS, CHoCH, swing highs/lows on all TFs' },
+    { key:'smc', name:'SMC / ICT', icon:'🎯', desc:'FVGs, Order Blocks, Liquidity, OTE, PD zones' },
+    { key:'technical', name:'Technical Confluence', icon:'📊', desc:'RSI div, EMA stack, VWAP, Volume Profile' },
+    { key:'macro', name:'Macro & Sentiment', icon:'🌐', desc:'News calendar, DXY, Fear & Greed, social' },
+    { key:'ai_brain', name:'AI Brain', icon:'🧠', desc:'LLM scores every trade 1–10 via Groq' },
+    { key:'risk', name:'Risk Manager', icon:'🛡', desc:'Sizing, heat, drawdown limits, loss streaks' },
+    { key:'executor', name:'Executor', icon:'⚙️', desc:'MT5 orders, spread check, partial close, trail' },
+    { key:'self_learning', name:'Self-Learning', icon:'📈', desc:'sklearn ML, asset ranking, weekly reports' },
+    { key:'alerts', name:'Alert System', icon:'🔔', desc:'Telegram alerts, daily briefing & summary' },
+  ];
+
+  const ASSETS = [
+    { group:'Indices', items:['NAS100','US30','SPX500','GER40','UK100'] },
+    { group:'Forex', items:['EURUSD','GBPUSD','USDJPY','AUDUSD','USDCAD','USDCHF'] },
+    { group:'Commodities', items:['XAUUSD','XAGUSD','USOIL'] },
+    { group:'Crypto CFDs', items:['BTCUSD','ETHUSD'] },
+  ];
+
+  React.useEffect(() => {
+    fetch('/api/agents/status')
+      .then(r => r.json())
+      .then(d => { setData(d); setLoading(false); })
+      .catch(() => { setErr('MT5 agent system not connected — run python main.py in mt5-agent/'); setLoading(false); });
+  }, []);
+
+  // Poll every 5s
+  React.useEffect(() => {
+    const iv = setInterval(() => {
+      fetch('/api/agents/status').then(r=>r.json()).then(setData).catch(()=>{});
+    }, 5000);
+    return () => clearInterval(iv);
+  }, []);
+
+  const getStatus = (key: string) => data?.agents?.[key] ?? { status:'offline', last_action:'—' };
+  const dotColor = (s: string) => s==='running'?'bg-emerald-500 animate-pulse':s==='paused'?'bg-yellow-500':'bg-zinc-700';
+  const textColor = (s: string) => s==='running'?'text-emerald-400':s==='paused'?'text-yellow-400':'text-zinc-600';
+
+  return (
+    <div className="space-y-4">
+      {/* HEADER STATS */}
+      {data && (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {[
+            { label:'Balance', val: data.account?.balance ? `$${data.account.balance.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}` : '—' },
+            { label:'Daily P&L', val: data.daily_pnl!=null ? `${data.daily_pnl>=0?'+':''}$${Math.abs(data.daily_pnl).toFixed(2)}` : '—', color: data.daily_pnl>=0?'text-emerald-400':'text-red-400' },
+            { label:'Portfolio Heat', val: data.portfolio_heat!=null ? `${data.portfolio_heat.toFixed(2)}%` : '—', color: data.portfolio_heat>2.5?'text-red-400':data.portfolio_heat>1.5?'text-yellow-400':'text-emerald-400' },
+            { label:'Open Positions', val: data.positions?.length ?? '—' },
+          ].map(s => (
+            <div key={s.label} className="rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-3">
+              <div className="text-[10px] text-zinc-600 uppercase tracking-wider mb-1">{s.label}</div>
+              <div className={cx('text-lg font-bold', (s as any).color || 'text-zinc-200')}>{s.val}</div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* AGENT STATUS GRID */}
+      <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4">
+        <div className="text-[10px] text-zinc-600 uppercase tracking-wider mb-3">Agent Status</div>
+        {loading && <div className="text-xs text-zinc-600 py-4">Loading...</div>}
+        {err && (
+          <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 px-4 py-6 text-center space-y-2">
+            <div className="text-2xl">🤖</div>
+            <div className="text-xs text-zinc-400 font-medium">MT5 Agent System Offline</div>
+            <div className="text-xs text-zinc-600">{err}</div>
+            <div className="text-xs text-zinc-700 mt-3">Setup instructions in mt5-agent/QUICK_START.md</div>
+          </div>
+        )}
+        {!loading && !err && (
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+            {AGENT_DEFS.map(a => {
+              const s = getStatus(a.key);
+              return (
+                <div key={a.key} className="rounded-lg border border-zinc-800 bg-zinc-950 p-3 space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-base">{a.icon}</span>
+                    <div className={cx('w-2 h-2 rounded-full', dotColor(s.status))}/>
+                  </div>
+                  <div className="text-[11px] font-semibold text-zinc-200">{a.name}</div>
+                  <div className={cx('text-[10px]', textColor(s.status))}>{s.status}</div>
+                  <div className="text-[10px] text-zinc-700 truncate">{s.last_action || a.desc}</div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* LIVE POSITIONS */}
+      {data?.positions?.length > 0 && (
+        <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4">
+          <div className="text-[10px] text-zinc-600 uppercase tracking-wider mb-3">Live Positions</div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead><tr className="text-left text-zinc-600 border-b border-zinc-800">
+                <th className="pb-2 pr-4">Asset</th><th className="pb-2 pr-4">Dir</th>
+                <th className="pb-2 pr-4">Entry</th><th className="pb-2 pr-4">Current</th>
+                <th className="pb-2 pr-4">SL</th><th className="pb-2 pr-4">Lots</th>
+                <th className="pb-2 pr-4">Live P&L</th><th className="pb-2">AI Score</th>
+              </tr></thead>
+              <tbody>
+                {data.positions.map((p: any, i: number) => (
+                  <tr key={i} className="border-b border-zinc-900">
+                    <td className="py-2 pr-4 font-bold">{p.symbol}</td>
+                    <td className="py-2 pr-4">
+                      <span className={cx('px-2 py-0.5 rounded text-[10px] font-bold', p.direction==='buy'?'bg-emerald-900/60 text-emerald-400':'bg-red-900/60 text-red-400')}>
+                        {p.direction?.toUpperCase()}
+                      </span>
+                    </td>
+                    <td className="py-2 pr-4 font-mono">{p.entry_price}</td>
+                    <td className="py-2 pr-4 font-mono">{p.current_price}</td>
+                    <td className="py-2 pr-4 font-mono text-red-400">{p.sl}</td>
+                    <td className="py-2 pr-4">{p.lots}</td>
+                    <td className={cx('py-2 pr-4 font-bold', p.profit>=0?'text-emerald-400':'text-red-400')}>
+                      {p.profit>=0?'+':''}{p.profit?.toFixed(2)}
+                    </td>
+                    <td className="py-2">
+                      <span className={cx('px-2 py-0.5 rounded text-[10px] font-bold', p.ai_score>=8?'bg-emerald-900/60 text-emerald-400':p.ai_score>=6?'bg-yellow-900/60 text-yellow-400':'bg-zinc-800 text-zinc-400')}>
+                        {p.ai_score ?? '—'}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* MARKET COVERAGE */}
+      <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4">
+        <div className="text-[10px] text-zinc-600 uppercase tracking-wider mb-3">Market Coverage — 20 Assets</div>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+          {ASSETS.map(g => (
+            <div key={g.group}>
+              <div className="text-[10px] text-zinc-600 mb-2">{g.group}</div>
+              <div className="space-y-1">
+                {g.items.map(sym => {
+                  const bias = data?.biases?.[sym];
+                  return (
+                    <div key={sym} className="flex items-center justify-between">
+                      <span className="text-xs font-mono">{sym}</span>
+                      {bias ? (
+                        <span className={cx('text-[10px] px-1.5 py-0.5 rounded font-bold',
+                          bias==='bullish'?'bg-emerald-900/60 text-emerald-400':
+                          bias==='bearish'?'bg-red-900/60 text-red-400':
+                          'bg-zinc-800 text-zinc-500')}>
+                          {bias.toUpperCase().slice(0,4)}
+                        </span>
+                      ) : (
+                        <span className="text-[10px] text-zinc-700">—</span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* WEEKLY REPORT */}
+      {data?.weekly_report && (
+        <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4">
+          <div className="text-[10px] text-zinc-600 uppercase tracking-wider mb-3">Latest Weekly AI Report</div>
+          <div className="text-xs text-zinc-400 leading-relaxed whitespace-pre-wrap">{data.weekly_report}</div>
+        </div>
+      )}
+
+      {/* PAUSED ASSETS */}
+      {data?.learning?.paused_assets?.length > 0 && (
+        <div className="rounded-xl border border-yellow-800/40 bg-yellow-900/10 p-4">
+          <div className="text-[10px] text-yellow-600 uppercase tracking-wider mb-2">⚠ Paused Assets (Win rate &lt;40% over 20 trades)</div>
+          <div className="flex gap-2 flex-wrap">
+            {data.learning.paused_assets.map((a: string) => (
+              <span key={a} className="px-2 py-1 rounded bg-yellow-900/40 text-yellow-400 text-xs font-bold">{a}</span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* SETUP INSTRUCTIONS */}
+      {(!data || err) && (
+        <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-5 space-y-3">
+          <div className="text-xs text-zinc-400 font-semibold">Setup Instructions</div>
+          <div className="space-y-2 text-xs text-zinc-500">
+            <div>1. Open terminal in the <code className="text-zinc-300">mt5-agent/</code> folder</div>
+            <div>2. Run <code className="bg-zinc-800 px-2 py-0.5 rounded text-zinc-200">pip install -r requirements.txt</code></div>
+            <div>3. Copy <code className="text-zinc-300">.env.example</code> to <code className="text-zinc-300">.env</code> and fill in your MT5 credentials + Groq API key</div>
+            <div>4. Run <code className="bg-zinc-800 px-2 py-0.5 rounded text-zinc-200">python main.py</code></div>
+            <div>5. The live dashboard opens at <code className="text-zinc-300">http://localhost:8000</code> — this tab connects to it automatically</div>
+          </div>
+          <div className="text-[10px] text-zinc-700">See mt5-agent/QUICK_START.md for full instructions</div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function BacktestTab() {
   const [sym, setSym] = useState('NQ');
   const [tf, setTf] = useState('1h');
@@ -1282,7 +1489,7 @@ export default function App() {
   const nextEvent = calEvents.find(e => e.isToday && (e.diffMin ?? -999) > -30);
   const pFmt = (sym: keyof Prices, dec = 1) => prices[sym] != null ? prices[sym]!.toFixed(dec) : '—';
 
-  const TABS: Tab[] = ['Markets','Setups','Trades','Analytics','Journal','Knowledge','Backtest'];
+  const TABS: Tab[] = ['Markets','Setups','Trades','Analytics','Journal','Knowledge','Backtest','Agents'];
   const MKT_TABS: MkTab[] = ['Futures','Crypto','Forex','Stocks','Institutional'];
 
   return (
@@ -1388,6 +1595,7 @@ export default function App() {
         {tab === 'Journal' && <JournalTab/>}
         {tab === 'Knowledge' && <KnowledgeTab/>}
         {tab === 'Backtest' && <BacktestTab/>}
+        {tab === 'Agents' && <AgentsTab/>}
       </main>
 
       {showScan && <ScanModal prices={prices} onClose={()=>setShowScan(false)} onDone={()=>{setShowScan(false);loadSetups();setTab('Setups');}}/>}
