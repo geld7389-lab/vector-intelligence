@@ -39,17 +39,18 @@ $ npm run build
  ✓ Compiled successfully
    Linting and checking validity of types ...
    Collecting page data ...
-   Generating static pages (0/7) ...
-   Generating static pages (1/7) 
-   Generating static pages (3/7) 
-   Generating static pages (5/7) 
- ✓ Generating static pages (7/7)
+   Generating static pages (0/8) ...
+   Generating static pages (2/8) 
+   Generating static pages (4/8) 
+   Generating static pages (6/8) 
+ ✓ Generating static pages (8/8)
    Finalizing page optimization ...
    Collecting build traces ...
 
 Route (app)                              Size     First Load JS
-┌ ○ /                                    74.5 kB         161 kB
+┌ ○ /                                    76.8 kB         164 kB
 ├ ○ /_not-found                          871 B          87.9 kB
+├ ○ /api/agents/status                   0 B                0 B
 ├ ƒ /api/analytics                       0 B                0 B
 ├ ƒ /api/analyze                         0 B                0 B
 ├ ƒ /api/autoscan                        0 B                0 B
@@ -80,8 +81,8 @@ Route (app)                              Size     First Load JS
 ├ ƒ /api/tv-webhook                      0 B                0 B
 └ ƒ /api/weekbias                        0 B                0 B
 + First Load JS shared by all            87 kB
-  ├ chunks/23-689eda8e83791f79.js        31.5 kB
-  ├ chunks/fd9d1056-23bdddb1df3a91c8.js  53.6 kB
+  ├ chunks/23-804d28d9b4a41ed3.js        31.5 kB
+  ├ chunks/fd9d1056-2821b0f0cabcd8bd.js  53.6 kB
   └ other shared chunks (total)          1.92 kB
 
 
@@ -89,7 +90,7 @@ Route (app)                              Size     First Load JS
 ƒ  (Dynamic)  server-rendered on demand
 
 ​
-(build.command completed in 26.4s)
+(build.command completed in 27.6s)
 ​
 Functions bundling                                            
 ────────────────────────────────────────────────────────────────
@@ -98,7 +99,7 @@ Packaging Functions from .netlify/functions-internal directory:
  - ___netlify-server-handler/___netlify-server-handler.mjs
 ​
 ​
-(Functions bundling completed in 1.2s)
+(Functions bundling completed in 1.3s)
 Deploy path:        /home/runner/work/vector-intelligence/vector-intelligence/.next
 Configuration path: /home/runner/work/vector-intelligence/vector-intelligence/netlify.toml
 Deploying to main site URL...
