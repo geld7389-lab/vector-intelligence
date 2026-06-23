@@ -19,34 +19,19 @@ jobs:
       - name: Install deps
         run: npm ci --legacy-peer-deps
 
-      - name: Build (next build)
+      - name: Install Vercel CLI
+        run: npm install -g vercel@latest
+
+      - name: Build and Deploy
         env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           NEXT_PUBLIC_SUPABASE_URL: https://xavkbjbgmuasfkliptsh.supabase.co
           NEXT_PUBLIC_SUPABASE_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhhdmtiamJnbXVhc2ZrbGlwdHNoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzgzNTAzOTIsImV4cCI6MjA5MzkyNjM5Mn0.GJgxNwP6LfphbHTijGhrHK5DMpDcarJin2bVmoxU4bo
           GROQ_API_KEY: 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
-        run: npx next build
-
-      - name: Deploy via Vercel API (create deployment from git)
-        env:
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
         run: |
-          # Trigger a deployment directly via Vercel API using the git commit
-          COMMIT_SHA=$(git rev-parse HEAD)
-          REPO="geld7389-lab/vector-intelligence"
-          
-          RESPONSE=$(curl -s -X POST "https://api.vercel.com/v13/deployments" \
-            -H "Authorization: Bearer $VERCEL_TOKEN" \
-            -H "Content-Type: application/json" \
-            -d "{
-              \"name\": \"vector-intelligence\",
-              \"project\": \"prj_X8Wum9saUBQ7LQlDTnnH32yYNpHz\",
-              \"target\": \"production\",
-              \"gitSource\": {
-                \"type\": \"github\",
-                \"repoId\": \"$(curl -s -H 'Authorization: Bearer ${{ secrets.GH_PAT }}' https://api.github.com/repos/$REPO | python3 -c \"import json,sys; print(json.load(sys.stdin)['id'])\")\",
-                \"ref\": \"main\",
-                \"sha\": \"$COMMIT_SHA\"
-              }
-            }")
-          
-          echo "$RESPONSE" | python3 -c "import json,sys; d=json.load(sys.stdin); print('URL:', d.get('url',''), 'State:', d.get('readyState',''), 'Error:', d.get('error',''))"
+          vercel deploy --prod --yes \
+            --token=$VERCEL_TOKEN \
+            --scope=khans-projects-015b3165 \
+            -e NEXT_PUBLIC_SUPABASE_URL="https://xavkbjbgmuasfkliptsh.supabase.co" \
+            -e NEXT_PUBLIC_SUPABASE_ANON_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhhdmtiamJnbXVhc2ZrbGlwdHNoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzgzNTAzOTIsImV4cCI6MjA5MzkyNjM5Mn0.GJgxNwP6LfphbHTijGhrHK5DMpDcarJin2bVmoxU4bo" \
+            -e GROQ_API_KEY="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"
