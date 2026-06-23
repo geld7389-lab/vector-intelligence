@@ -1493,7 +1493,7 @@ export default function App() {
   const MKT_TABS: MkTab[] = ['Futures','Crypto','Forex','Stocks','Institutional'];
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-zinc-200" style={{fontFamily:'ui-monospace,SFMono-Regular,monospace'}}>
+    <div className="h-screen flex flex-col bg-zinc-950 text-zinc-200 overflow-hidden" style={{fontFamily:'ui-monospace,SFMono-Regular,monospace'}}>
       {/* TOASTS */}
       <div className="fixed top-4 right-4 z-50 space-y-2 pointer-events-none">
         {toasts.map(a => (
@@ -1546,7 +1546,7 @@ export default function App() {
         ))}
       </nav>
 
-      <main className="max-w-5xl mx-auto px-4 py-4">
+      <main className="flex-1 overflow-y-auto max-w-5xl mx-auto w-full px-4 py-4">
         {tab === 'Markets' && (
           <div className="space-y-3">
             <div className="flex gap-1.5 overflow-x-auto pb-1">
