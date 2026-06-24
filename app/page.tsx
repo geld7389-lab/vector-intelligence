@@ -223,7 +223,7 @@ function AnalysisPanel({ setup, prices, onClose }: { setup: Setup; prices: Price
         <span className="text-xs text-zinc-500 uppercase tracking-wider">AI Analysis — {setup.symbol} {setup.setup_type}</span>
         <button onClick={onClose} className="text-zinc-600 hover:text-zinc-400 text-sm">✕</button>
       </div>
-      {loading ? <div className="flex items-center gap-2 text-xs text-zinc-500"><span className="animate-spin">⟳</span> Analyzing…</div>
+      {loading ? <div className="flex items-center gap-2 text-xs text-zinc-500"><span className="animate-spin inline-block">↻</span> Analyzing…</div>
         : <pre className="text-xs text-zinc-300 whitespace-pre-wrap leading-relaxed font-mono">{text}</pre>}
     </div>
   );
@@ -234,9 +234,9 @@ function ScanModal({ prices, onClose, onDone }: { prices: Prices; onClose: () =>
   const [scanning, setScanning] = useState(false);
   const [log, setLog] = useState<string[]>([]);
   const [result, setResult] = useState('');
-  const [syms, setSyms] = useState(['NQ','ES','GC']);
-  const [tfs, setTfs] = useState(['15m','1h']);
-  const symOpts = ['NQ','ES','GC','CL','BTC','ETH','SOL','EURUSD','GBPUSD','SPY','QQQ','NVDA'];
+  const [syms, setSyms] = useState(['NQ','ES','GC','EURUSD','GBPUSD','BTC']);
+  const [tfs, setTfs] = useState(['1h','4h']);
+  const symOpts = ['NQ','ES','GC','CL','BTC','ETH','EURUSD','GBPUSD','USDJPY','AUDUSD','SPY','QQQ','NVDA'];
   const tfOpts = ['15m','1h','4h'];
   const toggle = (arr: string[], setArr: (a:string[])=>void, v: string) =>
     setArr(arr.includes(v) ? arr.filter(x=>x!==v) : [...arr, v]);
@@ -279,7 +279,7 @@ function ScanModal({ prices, onClose, onDone }: { prices: Prices; onClose: () =>
           </div>
         )}
         <button onClick={scan} disabled={scanning||!syms.length} className="w-full py-2.5 rounded-xl bg-zinc-700 hover:bg-zinc-600 text-sm text-white font-medium transition-colors disabled:opacity-50">
-          {scanning ? '⟳ Scanning…' : `Scan ${syms.length} symbols × ${tfs.length} timeframes`}
+          {scanning ? 'Scanning…' : `Scan ${syms.length} symbols × ${tfs.length} timeframes`}
         </button>
       </div>
     </div>
@@ -425,21 +425,141 @@ function JournalPromptModal({ trade, onClose }: { trade: any; onClose: ()=>void 
   );
 }
 
+// ── ICONS (SVG — no emojis) ───────────────────
+const Icons = {
+  TrendUp:    () => <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>,
+  TrendDown:  () => <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="23 18 13.5 8.5 8.5 13.5 1 6"/><polyline points="17 18 23 18 23 12"/></svg>,
+  Dot:        ({c}:{c:string}) => <span style={{width:7,height:7,borderRadius:'50%',background:c,display:'inline-block',flexShrink:0}}/>,
+  Lightning:  () => <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>,
+  Brain:      () => <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M9.5 2A2.5 2.5 0 0 1 12 4.5v15a2.5 2.5 0 0 1-4.96-.44 2.5 2.5 0 0 1-2.96-3.08 3 3 0 0 1-.34-5.58 2.5 2.5 0 0 1 1.32-4.24A2.5 2.5 0 0 1 9.5 2"/><path d="M14.5 2A2.5 2.5 0 0 0 12 4.5v15a2.5 2.5 0 0 0 4.96-.44 2.5 2.5 0 0 0 2.96-3.08 3 3 0 0 0 .34-5.58 2.5 2.5 0 0 0-1.32-4.24A2.5 2.5 0 0 0 14.5 2"/></svg>,
+  Chart:      () => <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>,
+  Shield:     () => <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>,
+  Globe:      () => <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>,
+  Bell:       () => <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>,
+  Gear:       () => <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>,
+  Target:     () => <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>,
+  Ruler:      () => <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M3 3h18v18H3z"/><path d="M3 9h4M3 15h4M9 3v4M15 3v4"/></svg>,
+  Activity:   () => <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>,
+  BookOpen:   () => <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>,
+  Play:       () => <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>,
+  X:          () => <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>,
+  Check:      () => <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>,
+  Scan:       () => <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><line x1="7" y1="12" x2="17" y2="12"/></svg>,
+  Zap:        () => <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>,
+  Wifi:       () => <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M1.42 9a16 16 0 0 1 21.16 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/></svg>,
+  WifiOff:    () => <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><line x1="1" y1="1" x2="23" y2="23"/><path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55"/><path d="M5 12.55a10.94 10.94 0 0 1 5.17-2.39"/><path d="M10.71 5.05A16 16 0 0 1 22.56 9"/><path d="M1.42 9a15.91 15.91 0 0 1 4.7-2.88"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/></svg>,
+  Plus:       () => <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>,
+  ChevronR:   () => <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="9 18 15 12 9 6"/></svg>,
+  Minus:      () => <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="5" y1="12" x2="19" y2="12"/></svg>,
+};
+
 // ── MARKET SUB-TABS ────────────────────────────
 function CryptoTab() {
   const [data, setData] = useState<any[]>([]);
-  useEffect(() => { fetch('/api/crypto').then(r=>r.json()).then(d=>setData(d.prices??[])); }, []);
-  return <div className="rounded-xl border border-zinc-800/60 bg-zinc-900/40 divide-y divide-zinc-800/40">{data.length === 0 ? <div className="py-8 text-center text-xs text-zinc-600">Loading…</div> : data.map((a:any) => <PriceRow key={a.symbol} symbol={a.symbol} price={a.price} change={a.change} changePct={a.changePct} />)}</div>;
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    fetch('/api/crypto').then(r=>r.json()).then(d=>{
+      setData(d.prices ?? []);
+      setLoading(false);
+    }).catch(()=>setLoading(false));
+  }, []);
+  if (loading) return <div className="py-12 text-center text-xs text-zinc-600">Loading crypto prices…</div>;
+  if (!data.length) return <div className="py-12 text-center text-xs text-zinc-600">No data available</div>;
+  return (
+    <div className="rounded-xl border border-zinc-800/60 bg-zinc-900/40 divide-y divide-zinc-800/40">
+      {data.map((a:any) => <PriceRow key={a.symbol} symbol={a.symbol} price={a.price} change={a.change} changePct={a.changePct} />)}
+    </div>
+  );
 }
+
 function ForexTab() {
-  const [data, setData] = useState<any[]>([]);
-  useEffect(() => { fetch('/api/forex').then(r=>r.json()).then(d=>setData(d.prices??[])); }, []);
-  return <div className="rounded-xl border border-zinc-800/60 bg-zinc-900/40 divide-y divide-zinc-800/40">{data.length === 0 ? <div className="py-8 text-center text-xs text-zinc-600">Loading…</div> : data.map((a:any) => <PriceRow key={a.symbol} symbol={a.symbol} price={a.price} change={a.change} changePct={a.changePct} />)}</div>;
+  const [fx, setFx] = useState<any[]>([]);
+  const [comm, setComm] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    fetch('/api/forex').then(r=>r.json()).then(d=>{
+      // API returns {forex:[...], commodities:[...]}
+      setFx(d.forex ?? d.prices ?? []);
+      setComm(d.commodities ?? []);
+      setLoading(false);
+    }).catch(()=>setLoading(false));
+  }, []);
+  if (loading) return <div className="py-12 text-center text-xs text-zinc-600">Loading forex prices…</div>;
+  return (
+    <div className="space-y-3">
+      {fx.length > 0 && (
+        <div>
+          <div className="text-[10px] text-zinc-600 uppercase tracking-wider mb-2 px-1">Forex Pairs</div>
+          <div className="rounded-xl border border-zinc-800/60 bg-zinc-900/40 divide-y divide-zinc-800/40">
+            {fx.map((a:any) => (
+              <PriceRow key={a.symbol} symbol={a.pair ?? a.name ?? a.symbol}
+                price={a.price} change={a.change != null ? a.price && a.change ? a.price * a.change / 100 : null : null}
+                changePct={a.change} />
+            ))}
+          </div>
+        </div>
+      )}
+      {comm.length > 0 && (
+        <div>
+          <div className="text-[10px] text-zinc-600 uppercase tracking-wider mb-2 px-1">Commodities</div>
+          <div className="rounded-xl border border-zinc-800/60 bg-zinc-900/40 divide-y divide-zinc-800/40">
+            {comm.map((a:any) => (
+              <PriceRow key={a.symbol} symbol={a.name ?? a.symbol}
+                price={a.price}
+                changePct={a.change} />
+            ))}
+          </div>
+        </div>
+      )}
+      {!fx.length && !comm.length && <div className="py-12 text-center text-xs text-zinc-600">No forex data available</div>}
+    </div>
+  );
 }
+
 function StocksTab() {
-  const [data, setData] = useState<any[]>([]);
-  useEffect(() => { fetch('/api/stocks').then(r=>r.json()).then(d=>setData(d.prices??[])); }, []);
-  return <div className="rounded-xl border border-zinc-800/60 bg-zinc-900/40 divide-y divide-zinc-800/40">{data.length === 0 ? <div className="py-8 text-center text-xs text-zinc-600">Loading…</div> : data.map((a:any) => <PriceRow key={a.symbol} symbol={a.symbol} price={a.price} change={a.change} changePct={a.changePct} />)}</div>;
+  const [indices, setIndices] = useState<any[]>([]);
+  const [stocks, setStocks] = useState<any[]>([]);
+  const [etfs, setEtfs] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    fetch('/api/stocks').then(r=>r.json()).then(d=>{
+      // API returns {indices:[...], stocks:[...], etfs:[...]}
+      setIndices(d.indices ?? []);
+      setStocks(d.stocks ?? d.prices ?? []);
+      setEtfs(d.etfs ?? []);
+      setLoading(false);
+    }).catch(()=>setLoading(false));
+  }, []);
+  if (loading) return <div className="py-12 text-center text-xs text-zinc-600">Loading stock prices…</div>;
+  return (
+    <div className="space-y-3">
+      {indices.length > 0 && (
+        <div>
+          <div className="text-[10px] text-zinc-600 uppercase tracking-wider mb-2 px-1">Indices</div>
+          <div className="rounded-xl border border-zinc-800/60 bg-zinc-900/40 divide-y divide-zinc-800/40">
+            {indices.map((a:any) => <PriceRow key={a.symbol} symbol={a.name ?? a.symbol} price={a.price} changePct={a.change} />)}
+          </div>
+        </div>
+      )}
+      {stocks.length > 0 && (
+        <div>
+          <div className="text-[10px] text-zinc-600 uppercase tracking-wider mb-2 px-1">Mega-Cap Stocks</div>
+          <div className="rounded-xl border border-zinc-800/60 bg-zinc-900/40 divide-y divide-zinc-800/40">
+            {stocks.map((a:any) => <PriceRow key={a.symbol} symbol={a.name ?? a.symbol} price={a.price} changePct={a.change} />)}
+          </div>
+        </div>
+      )}
+      {etfs.length > 0 && (
+        <div>
+          <div className="text-[10px] text-zinc-600 uppercase tracking-wider mb-2 px-1">ETFs</div>
+          <div className="rounded-xl border border-zinc-800/60 bg-zinc-900/40 divide-y divide-zinc-800/40">
+            {etfs.map((a:any) => <PriceRow key={a.symbol} symbol={a.name ?? a.symbol} price={a.price} changePct={a.change} />)}
+          </div>
+        </div>
+      )}
+      {!indices.length && !stocks.length && <div className="py-12 text-center text-xs text-zinc-600">No stock data available</div>}
+    </div>
+  );
 }
 
 // ── WEEKLY BIAS ────────────────────────────────
@@ -553,7 +673,7 @@ function CalendarWidget() {
             <div className="flex items-center gap-2">
               <span className={cx('w-1.5 h-1.5 rounded-full shrink-0', e.impact==='critical'?'bg-red-500':e.impact==='high'?'bg-orange-400':'bg-zinc-600')}/>
               <span className={e.isDangerZone ? 'text-red-300' : 'text-zinc-400'}>{e.name}</span>
-              {e.isDangerZone && <span className="text-red-400 text-xs animate-pulse">⚠ ACTIVE</span>}
+              {e.isDangerZone && <span className="text-red-400 text-xs animate-pulse">ACTIVE</span>}
             </div>
             <span className="text-zinc-600 font-mono">{e.isToday ? e.time : new Date(e.date+'T00:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'})}</span>
           </div>
@@ -1005,16 +1125,16 @@ function AgentsTab() {
   const [lastRun, setLastRun] = React.useState<string>('Never');
 
   const AGENT_DEFS = [
-    { key:'orchestrator',     name:'Master Orchestrator', icon:'⚡', desc:'Coordinates all agents' },
-    { key:'market_structure', name:'Market Structure',    icon:'📐', desc:'BOS, CHoCH, swing highs/lows' },
-    { key:'smc',              name:'SMC / ICT',           icon:'🎯', desc:'FVGs, Order Blocks, Liquidity' },
-    { key:'technical',        name:'Technical Confluence',icon:'📊', desc:'RSI, EMA, VWAP' },
-    { key:'macro',            name:'Macro & Sentiment',   icon:'🌐', desc:'News, DXY, Fear & Greed' },
-    { key:'ai_brain',         name:'AI Brain',            icon:'🧠', desc:'Groq LLM scores 1–10' },
-    { key:'risk',             name:'Risk Manager',        icon:'🛡', desc:'Heat, drawdown, loss limits' },
-    { key:'executor',         name:'Executor',            icon:'⚙️', desc:'Signal & position management' },
-    { key:'self_learning',    name:'Self-Learning',       icon:'📈', desc:'Win rate & performance ML' },
-    { key:'alerts',           name:'Alert System',        icon:'🔔', desc:'Telegram alerts & briefings' },
+    { key:'orchestrator',     name:'Master Orchestrator', icon:'ORC', desc:'Coordinates all agents' },
+    { key:'market_structure', name:'Market Structure',    icon:'STR', desc:'BOS, CHoCH, swing highs/lows' },
+    { key:'smc',              name:'SMC / ICT',           icon:'SMC', desc:'FVGs, Order Blocks, Liquidity' },
+    { key:'technical',        name:'Technical Confluence',icon:'TEC', desc:'RSI, EMA, VWAP' },
+    { key:'macro',            name:'Macro & Sentiment',   icon:'MAC', desc:'News, DXY, Fear & Greed' },
+    { key:'ai_brain',         name:'AI Brain',            icon:'AI', desc:'Groq LLM scores 1–10' },
+    { key:'risk',             name:'Risk Manager',        icon:'RSK', desc:'Heat, drawdown, loss limits' },
+    { key:'executor',         name:'Executor',            icon:'EXE', desc:'Signal & position management' },
+    { key:'self_learning',    name:'Self-Learning',       icon:'LRN', desc:'Win rate & performance ML' },
+    { key:'alerts',           name:'Alert System',        icon:'ALT', desc:'Telegram alerts & briefings' },
   ];
 
   const ASSETS = [
@@ -1069,7 +1189,7 @@ function AgentsTab() {
           disabled={running}
           className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:bg-zinc-800 disabled:text-zinc-600 text-black font-bold text-sm transition-colors flex items-center gap-2 whitespace-nowrap"
         >
-          {running ? <><span className="animate-spin">⟳</span> Running agents...</> : '▶ Run All Agents'}
+          {running ? <><span className="animate-spin inline-block">↻</span> Running agents...</> : '▶ Run All Agents'}
         </button>
       </div>
 
@@ -1102,7 +1222,7 @@ function AgentsTab() {
               return (
                 <div key={a.key} className="rounded-lg border border-zinc-800 bg-zinc-950 p-3 space-y-1.5">
                   <div className="flex items-center justify-between">
-                    <span className="text-base">{a.icon}</span>
+                    <span className="text-[10px] font-bold text-zinc-500 font-mono tracking-wider">{a.icon}</span>
                     <div className={cx('w-2 h-2 rounded-full', dotColor(s.status))}/>
                   </div>
                   <div className="text-[11px] font-semibold text-zinc-200">{a.name}</div>
@@ -1200,7 +1320,7 @@ function AgentsTab() {
           <div className="flex items-center justify-between mb-3">
             <div className="text-[10px] text-zinc-600 uppercase tracking-wider">Economic Calendar</div>
             {data.blackout_active && (
-              <span className="px-2 py-0.5 rounded bg-red-900/40 text-red-400 text-[10px] font-bold animate-pulse">⛔ NEWS BLACKOUT ACTIVE</span>
+              <span className="px-2 py-0.5 rounded bg-red-900/40 text-red-400 text-[10px] font-bold animate-pulse">NEWS BLACKOUT ACTIVE</span>
             )}
             {data.dxy_trend && (
               <span className="text-[10px] text-zinc-500">DXY: <span className={data.dxy_trend==='rising'?'text-emerald-400':'text-red-400'}>{data.dxy_trend}</span></span>
@@ -1254,7 +1374,7 @@ function AgentsTab() {
           )}
           {data.learning.paused_assets?.length > 0 && (
             <div className="mt-3 flex gap-2 flex-wrap">
-              <span className="text-[10px] text-yellow-600">⚠ Paused:</span>
+              <span className="text-[10px] text-yellow-600">Paused:</span>
               {data.learning.paused_assets.map((a: string) => (
                 <span key={a} className="px-2 py-0.5 rounded bg-yellow-900/40 text-yellow-400 text-[10px] font-bold">{a}</span>
               ))}
@@ -1347,7 +1467,7 @@ function BacktestTab() {
                 <button onClick={()=>setDir('bear')} className={cx('px-3 py-1.5 rounded-lg text-xs border', dir==='bear'?'border-red-700 bg-red-900/30 text-red-400':'border-zinc-800 text-zinc-600')}>↓ Bear</button>
               </div>
             </div>
-            <button onClick={run} disabled={running} className="w-full py-2.5 rounded-xl bg-zinc-700 hover:bg-zinc-600 text-sm text-white disabled:opacity-50">{running?'⟳ Running…':'Run ICT Backtest'}</button>
+            <button onClick={run} disabled={running} className="w-full py-2.5 rounded-xl bg-zinc-700 hover:bg-zinc-600 text-sm text-white disabled:opacity-50">{running?'Running…':'Run ICT Backtest'}</button>
           </div>
 
           {result && !result.error && (
@@ -1430,7 +1550,7 @@ function TelegramSettings({ onClose }: { onClose: ()=>void }) {
     <div className="fixed inset-0 bg-black/70 z-50 flex items-end sm:items-center justify-center p-4" onClick={onClose}>
       <div className="bg-zinc-900 border border-zinc-700 rounded-2xl p-5 w-full max-w-sm" onClick={e=>e.stopPropagation()}>
         <div className="flex justify-between items-center mb-4">
-          <span className="text-sm font-bold text-white">🔔 Telegram Alerts</span>
+          <span className="text-sm font-bold text-white">Telegram Alerts</span>
           <button onClick={onClose} className="text-zinc-600 hover:text-zinc-400">✕</button>
         </div>
         <div className="text-xs text-zinc-600 bg-zinc-800/60 rounded-lg p-3 mb-4 space-y-1">
@@ -1444,7 +1564,7 @@ function TelegramSettings({ onClose }: { onClose: ()=>void }) {
           <div>
             <label className="text-xs text-zinc-600 block mb-2">Alert types</label>
             <div className="grid grid-cols-2 gap-1.5">
-              {[['sl','SL Hit 🔴'],['entry','Entry Zone 🟡'],['tp','TP Hit 🟢'],['scan','New Setup 📡']].map(([k,label])=>(
+              {[['sl','SL Hit'],['entry','Entry Zone'],['tp','TP Hit'],['scan','New Setup']].map(([k,label])=>(
                 <button key={k} onClick={()=>setAlerts(p=>({...p,[k]:!p[k as keyof typeof p]}))} className={cx('py-1.5 rounded-lg border text-xs transition-all', alerts[k as keyof typeof alerts]?'border-zinc-500 bg-zinc-700 text-zinc-200':'border-zinc-800 text-zinc-600')}>{label}</button>
               ))}
             </div>
@@ -1581,7 +1701,7 @@ export default function App() {
               <span className="text-zinc-700">{kz.nyTime}</span>
             </span>
           )}
-          {dangerNews && <span className="text-xs text-red-400 animate-pulse font-semibold hidden sm:block">⚠ NEWS</span>}
+          {dangerNews && <span className="text-xs text-red-400 animate-pulse font-semibold hidden sm:block">NEWS</span>}
           {nextEvent && !dangerNews && <span className="text-xs text-zinc-600 hidden sm:block">{nextEvent.name} {nextEvent.diffMin != null ? `${nextEvent.diffMin}m` : ''}</span>}
         </div>
 
@@ -1595,8 +1715,8 @@ export default function App() {
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
-          <button onClick={()=>setShowTelegram(true)} title="Telegram alerts" className="text-zinc-600 hover:text-zinc-300 text-lg leading-none">🔔</button>
-          <button onClick={()=>setShowScan(true)} className="px-3 py-1.5 rounded-lg bg-zinc-800 border border-zinc-700 text-xs text-zinc-300 hover:border-zinc-500 transition-colors">Scan</button>
+          <button onClick={()=>setShowTelegram(true)} title="Telegram alerts" className="p-1.5 rounded-lg text-zinc-600 hover:text-zinc-300 hover:bg-zinc-800 transition-colors"><Icons.Bell /></button>
+          <button onClick={()=>setShowScan(true)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-zinc-800 border border-zinc-700 text-xs text-zinc-300 hover:border-zinc-500 transition-colors"><Icons.Scan /> Scan</button>
         </div>
       </header>
 
@@ -1630,7 +1750,7 @@ export default function App() {
               <span className="text-xs text-zinc-600 uppercase tracking-wider">Active Setups · {setups.length}</span>
               <button onClick={()=>setShowScan(true)} className="text-xs px-3 py-1.5 rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-400 hover:border-zinc-500">+ Scan</button>
             </div>
-            {dangerNews && <div className="rounded-xl border border-red-800/50 bg-red-900/20 px-3 py-2 text-xs text-red-300">⚠ High-impact news active — elevated risk</div>}
+            {dangerNews && <div className="rounded-xl border border-red-800/50 bg-red-900/20 px-3 py-2 text-xs text-red-300">High-impact news active — elevated risk</div>}
             {setups.length === 0 ? (
               <div className="text-center py-20 space-y-3">
                 <p className="text-zinc-600 text-sm">No setups — run a scan to detect ICT setups</p>
