@@ -161,6 +161,34 @@ function CandleChart({ symbol, timeframe, entry_low, entry_high, stop_loss, targ
 }
 
 // ── SETUP CARD ─────────────────────────────────
+// ── MONITOR BUTTON ─────────────────────────────
+function MonitorButton({ onDone }: { onDone: () => void }) {
+  const [running, setRunning] = useState(false);
+  const [result, setResult] = useState<any>(null);
+  const run = async () => {
+    setRunning(true); setResult(null);
+    try {
+      const r = await fetch('/api/setups/monitor', { method: 'POST' });
+      const d = await r.json();
+      setResult(d);
+      onDone();
+    } catch (e: any) { setResult({ error: e.message }); }
+    setRunning(false);
+  };
+  return (
+    <div style={{display:'flex',alignItems:'center',gap:6}}>
+      <button onClick={run} disabled={running} className="btn btn-ghost" style={{fontSize:11,padding:'5px 12px',color:'var(--amber-3)'}}>
+        {running ? '↻ Monitoring...' : '⟳ Monitor'}
+      </button>
+      {result && !result.error && (
+        <span style={{fontSize:10,color:'var(--muted)'}}>
+          {result.updated > 0 ? `${result.filled} filled • ${result.expired} expired` : 'All watching'}
+        </span>
+      )}
+    </div>
+  );
+}
+
 function SetupCard({ s, prices, onDelete, onAnalyze, onTrade, onSelect, selected }: {
   s: Setup; prices: Prices; onDelete: (id: string) => void;
   onAnalyze: (s: Setup) => void; onTrade: (s: Setup) => void;
@@ -172,6 +200,17 @@ function SetupCard({ s, prices, onDelete, onAnalyze, onTrade, onSelect, selected
   const inZone = price != null && price >= s.entry_low && price <= s.entry_high;
   const sc = s.confluence_score;
   const scoreClass = sc >= 80 ? 'score-high' : sc >= 65 ? 'score-mid' : 'score-low';
+
+  // Expiry countdown
+  const expiresAt = s.expires_at ? new Date(s.expires_at) : null;
+  const now = new Date();
+  const minsLeft = expiresAt ? Math.round((expiresAt.getTime() - now.getTime()) / 60000) : null;
+  const expired = minsLeft !== null && minsLeft <= 0;
+  const expiringSoon = minsLeft !== null && minsLeft > 0 && minsLeft <= 60;
+
+  // Price distance to entry
+  const distToEntry = price != null ? (isBull ? price - s.entry_high : s.entry_low - price) : null;
+  const distPct = distToEntry != null && s.entry_high > 0 ? Math.abs(distToEntry / s.entry_high * 100) : null;
 
   return (
     <div
@@ -191,12 +230,17 @@ function SetupCard({ s, prices, onDelete, onAnalyze, onTrade, onSelect, selected
           {s.choch_level && <span className="badge badge-purple">CHoCH</span>}
           {s.bos_level && <span className="badge badge-purple">BOS</span>}
           {inZone && <span className="badge badge-amber" style={{animation:'pulse-dot 1.5s infinite'}}>IN ZONE</span>}
+          {expired && <span className="badge badge-red">EXPIRED</span>}
+          {expiringSoon && !expired && <span className="badge badge-amber">{minsLeft}m left</span>}
+          {distPct != null && !inZone && !expired && distToEntry != null && distToEntry > 0 && (
+            <span className="badge badge-gray">{distPct.toFixed(1)}% away</span>
+          )}
         </div>
         <div className={cx('score-ring', scoreClass)}>{sc}</div>
       </div>
 
       {/* PRICE GRID */}
-      <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:'4px 16px',marginTop:10}}>
+      <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:'4px 12px',marginTop:10}}>
         {[
           {l:'Entry',v:`${s.entry_low}–${s.entry_high}`,c:'var(--text-2)'},
           {l:'Stop',v:String(s.stop_loss),c:'var(--red-3)'},
@@ -204,6 +248,7 @@ function SetupCard({ s, prices, onDelete, onAnalyze, onTrade, onSelect, selected
           {l:'R:R',v:`${s.rr_ratio}R`,c:'var(--text)'},
           {l:'Vol',v:s.volume_context,c:s.volume_context==='high'?'var(--green-3)':s.volume_context==='low'?'var(--red-3)':'var(--text-2)'},
           {l:'Live',v:price?.toFixed(1)??'—',c:inZone?'var(--amber-3)':'var(--text-2)'},
+          {l:'Expires',v:expiresAt?`${expiresAt.toLocaleDateString([],{month:'short',day:'numeric'})} ${expiresAt.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}`:'-',c:expired?'var(--red-3)':expiringSoon?'var(--amber-3)':'var(--muted)'},
         ].map(({l,v,c})=>(
           <div key={l} style={{display:'flex',gap:4,alignItems:'baseline'}}>
             <span style={{fontSize:10,color:'var(--muted)',fontWeight:600,letterSpacing:'0.05em',textTransform:'uppercase',flexShrink:0}}>{l}</span>
@@ -1197,6 +1242,49 @@ function AgentsTab() {
   const [runResult, setRunResult] = React.useState<any>(null);
   const [lastRun, setLastRun] = React.useState<string>('Never');
 
+  // MT5 Cloud Connection state
+  const [mt5Tab, setMt5Tab] = React.useState<'status'|'connect'>('status');
+  const [mt5Login, setMt5Login] = React.useState('');
+  const [mt5Pass, setMt5Pass] = React.useState('');
+  const [mt5Server, setMt5Server] = React.useState('');
+  const [mt5AccountName, setMt5AccountName] = React.useState('');
+  const [mt5Connecting, setMt5Connecting] = React.useState(false);
+  const [mt5Result, setMt5Result] = React.useState<any>(null);
+  const [mt5Accounts, setMt5Accounts] = React.useState<any[]>([]);
+  const [mt5AccountInfo, setMt5AccountInfo] = React.useState<any>(null);
+  const [mt5Loading, setMt5Loading] = React.useState(false);
+
+  const loadMt5Accounts = React.useCallback(async () => {
+    try {
+      const r = await fetch('/api/mt5/connect');
+      const d = await r.json();
+      setMt5Accounts(d.accounts ?? []);
+      // Auto-load account info for first connected account
+      const connected = (d.accounts ?? []).find((a: any) => a.connectionStatus === 'CONNECTED');
+      if (connected) {
+        const r2 = await fetch(`/api/mt5/account?accountId=${connected.id}`);
+        const d2 = await r2.json();
+        setMt5AccountInfo({ ...d2, accountId: connected.id, accountName: connected.name });
+      }
+    } catch {}
+  }, []);
+
+  const connectMt5 = async () => {
+    if (!mt5Login || !mt5Pass || !mt5Server) return;
+    setMt5Connecting(true); setMt5Result(null);
+    try {
+      const r = await fetch('/api/mt5/connect', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ login: mt5Login, password: mt5Pass, server: mt5Server, accountName: mt5AccountName || `VECTOR-${mt5Login}` }),
+      });
+      const d = await r.json();
+      setMt5Result(d);
+      if (d.success) { loadMt5Accounts(); setMt5Tab('status'); }
+    } catch (e: any) { setMt5Result({ error: e.message }); }
+    setMt5Connecting(false);
+  };
+
   const AGENT_DEFS = [
     { key:'orchestrator',     name:'Master Orchestrator', icon:'ORC', desc:'Coordinates all agents' },
     { key:'market_structure', name:'Market Structure',    icon:'STR', desc:'BOS, CHoCH, swing highs/lows' },
@@ -1223,7 +1311,7 @@ function AgentsTab() {
       .catch(()=>setLoading(false));
   }, []);
 
-  React.useEffect(() => { loadStatus(); }, [loadStatus]);
+  React.useEffect(() => { loadStatus(); loadMt5Accounts(); }, [loadStatus, loadMt5Accounts]);
   React.useEffect(() => {
     const iv = setInterval(loadStatus, 8000);
     return () => clearInterval(iv);
@@ -1455,6 +1543,153 @@ function AgentsTab() {
           )}
         </div>
       )}
+
+      {/* MT5 CLOUD CONNECTION PANEL */}
+      <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <div className="text-sm font-semibold text-zinc-200">MetaTrader 5 — Cloud Connection</div>
+            <div className="text-xs text-zinc-600 mt-0.5">Connect your MT5 account via MetaApi cloud — no local software needed</div>
+          </div>
+          <div className="flex gap-2">
+            {(['status','connect'] as const).map(t=>(
+              <button key={t} onClick={()=>setMt5Tab(t)}
+                className={cx('px-3 py-1 rounded-lg text-[11px] font-semibold transition-colors',
+                  mt5Tab===t?'bg-zinc-700 text-zinc-100':'bg-zinc-800 text-zinc-500 hover:text-zinc-300')}>
+                {t==='status'?'Accounts':'Connect New'}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {mt5Tab === 'status' && (
+          <div>
+            {mt5Accounts.length === 0 ? (
+              <div className="text-center py-8">
+                <div className="text-xs text-zinc-600 mb-2">No MT5 accounts connected</div>
+                <div className="text-[10px] text-zinc-700 mb-4">Connect your MT5 demo or live account to enable cloud trading</div>
+                <div className="text-[10px] text-zinc-700 space-y-1">
+                  <div>1. Get a free MetaApi token at <span className="text-emerald-500">app.metaapi.cloud/token</span></div>
+                  <div>2. Add <span className="text-zinc-400 font-mono">METAAPI_TOKEN</span> to your Vercel environment variables</div>
+                  <div>3. Click "Connect New" and enter your MT5 credentials</div>
+                </div>
+                <button onClick={()=>setMt5Tab('connect')} className="mt-4 px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-black text-xs font-bold transition-colors">
+                  + Connect MT5 Account
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {mt5Accounts.map((acc: any) => (
+                  <div key={acc.id} className="rounded-lg border border-zinc-800 bg-zinc-950 p-3">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-3">
+                        <div className={cx('w-2 h-2 rounded-full', acc.connectionStatus==='CONNECTED'?'bg-emerald-500 animate-pulse':'bg-zinc-600')}/>
+                        <span className="text-xs font-semibold text-zinc-200">{acc.name}</span>
+                        <span className="text-[10px] text-zinc-600 font-mono">{acc.login} @ {acc.server}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className={cx('text-[10px] px-2 py-0.5 rounded font-bold',
+                          acc.connectionStatus==='CONNECTED'?'bg-emerald-900/60 text-emerald-400':'bg-zinc-800 text-zinc-500')}>
+                          {acc.connectionStatus ?? acc.state}
+                        </span>
+                        <span className="text-[10px] text-zinc-600">{acc.platform?.toUpperCase()}</span>
+                      </div>
+                    </div>
+                    {mt5AccountInfo?.accountId === acc.id && mt5AccountInfo?.info && (
+                      <div className="grid grid-cols-4 gap-2 mt-2 pt-2 border-t border-zinc-800">
+                        {[
+                          { l:'Balance', v:`$${mt5AccountInfo.info.balance?.toLocaleString('en',{minimumFractionDigits:2,maximumFractionDigits:2})}` },
+                          { l:'Equity', v:`$${mt5AccountInfo.info.equity?.toLocaleString('en',{minimumFractionDigits:2,maximumFractionDigits:2})}` },
+                          { l:'Margin', v:`$${mt5AccountInfo.info.margin?.toFixed(2)}` },
+                          { l:'Free Margin', v:`$${mt5AccountInfo.info.freeMargin?.toFixed(2)}` },
+                        ].map(s=>(
+                          <div key={s.l} className="rounded bg-zinc-900 px-2 py-1">
+                            <div className="text-[10px] text-zinc-600">{s.l}</div>
+                            <div className="text-xs font-bold text-zinc-200 font-mono">{s.v ?? '—'}</div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {mt5AccountInfo?.positions?.length > 0 && mt5AccountInfo.accountId === acc.id && (
+                      <div className="mt-3">
+                        <div className="text-[10px] text-zinc-600 mb-2">Open Positions ({mt5AccountInfo.positions.length})</div>
+                        <div className="space-y-1">
+                          {mt5AccountInfo.positions.slice(0,5).map((p: any) => (
+                            <div key={p.id} className="flex items-center justify-between text-[11px] py-1 border-b border-zinc-900">
+                              <div className="flex items-center gap-2">
+                                <span className={cx('px-1.5 py-0.5 rounded text-[10px] font-bold', p.type==='POSITION_TYPE_BUY'?'bg-emerald-900/60 text-emerald-400':'bg-red-900/60 text-red-400')}>
+                                  {p.type==='POSITION_TYPE_BUY'?'BUY':'SELL'}
+                                </span>
+                                <span className="font-mono text-zinc-200">{p.symbol}</span>
+                                <span className="text-zinc-600">{p.volume} lots</span>
+                              </div>
+                              <div className="flex items-center gap-3">
+                                <span className="text-zinc-500">@ {p.openPrice?.toFixed(5)}</span>
+                                <span className={cx('font-bold', (p.profit??0)>=0?'text-emerald-400':'text-red-400')}>
+                                  {(p.profit??0)>=0?'+':''}{p.profit?.toFixed(2)}
+                                </span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))}
+                <button onClick={loadMt5Accounts} className="text-[10px] text-zinc-600 hover:text-zinc-400 transition-colors mt-1">
+                  ↻ Refresh
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {mt5Tab === 'connect' && (
+          <div className="space-y-3">
+            <div className="rounded-lg border border-zinc-800 bg-zinc-950 p-3 text-[11px] text-zinc-500 space-y-1">
+              <div className="text-zinc-400 font-semibold mb-2">How it works</div>
+              <div>• MetaApi runs your MT5 terminal in the cloud — 100% online, no VPS needed</div>
+              <div>• Supports any broker (ICMarkets, Pepperstone, FXCM, etc.)</div>
+              <div>• Demo and live accounts both supported</div>
+              <div>• Free tier: 1 MT5 account — <span className="text-emerald-500">app.metaapi.cloud</span></div>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="text-[10px] text-zinc-600 mb-1 block">MT5 Login (Account Number)</label>
+                <input value={mt5Login} onChange={e=>setMt5Login(e.target.value)} placeholder="123456"
+                  className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-xs text-zinc-200 focus:outline-none focus:border-zinc-600"/>
+              </div>
+              <div>
+                <label className="text-[10px] text-zinc-600 mb-1 block">MT5 Password</label>
+                <input type="password" value={mt5Pass} onChange={e=>setMt5Pass(e.target.value)} placeholder="••••••••"
+                  className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-xs text-zinc-200 focus:outline-none focus:border-zinc-600"/>
+              </div>
+              <div>
+                <label className="text-[10px] text-zinc-600 mb-1 block">Broker Server</label>
+                <input value={mt5Server} onChange={e=>setMt5Server(e.target.value)} placeholder="ICMarketsSC-Demo"
+                  className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-xs text-zinc-200 focus:outline-none focus:border-zinc-600"/>
+              </div>
+              <div>
+                <label className="text-[10px] text-zinc-600 mb-1 block">Account Name (optional)</label>
+                <input value={mt5AccountName} onChange={e=>setMt5AccountName(e.target.value)} placeholder="My Demo Account"
+                  className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-xs text-zinc-200 focus:outline-none focus:border-zinc-600"/>
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              <button onClick={connectMt5} disabled={mt5Connecting || !mt5Login || !mt5Pass || !mt5Server}
+                className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:bg-zinc-800 disabled:text-zinc-600 text-black font-bold text-xs transition-colors flex items-center gap-2">
+                {mt5Connecting ? <><span className="animate-spin">↻</span> Connecting...</> : '▶ Connect to MetaApi Cloud'}
+              </button>
+              <span className="text-[10px] text-zinc-700">Requires METAAPI_TOKEN in Vercel env vars</span>
+            </div>
+            {mt5Result && (
+              <div className={cx('rounded-lg border p-3 text-xs', mt5Result.error?'border-red-800 bg-red-900/10 text-red-400':'border-emerald-800 bg-emerald-900/10 text-emerald-400')}>
+                {mt5Result.error ? `Error: ${mt5Result.error}` : `✓ ${mt5Result.message}`}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
 
     </div>
   );
@@ -1874,9 +2109,12 @@ export default function App() {
                 </span>
                 {setups.length>0&&<span className="badge badge-green">{setups.length}</span>}
               </div>
-              <button onClick={()=>setShowScan(true)} className="btn btn-ghost" style={{fontSize:11,padding:'5px 12px'}}>
-                <Icons.Plus/> Scan
-              </button>
+              <div style={{display:'flex',alignItems:'center',gap:8}}>
+                <MonitorButton onDone={loadSetups}/>
+                <button onClick={()=>setShowScan(true)} className="btn btn-ghost" style={{fontSize:11,padding:'5px 12px'}}>
+                  <Icons.Plus/> Scan
+                </button>
+              </div>
             </div>
             {dangerNews && (
               <div style={{padding:'8px 12px',borderRadius:8,background:'rgba(239,68,68,0.06)',

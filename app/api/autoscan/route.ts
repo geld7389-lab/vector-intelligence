@@ -141,7 +141,9 @@ function buildSetups(analysis: NonNullable<ReturnType<typeof analyzeStructure>>,
     : ['USDJPY','GBPJPY','EURJPY'].includes(symbol) ? 3
     : 2;
 
-  const exp = new Date(Date.now()+24*60*60*1000).toISOString();
+  // Expiry based on timeframe — setups are only valid for a few candles
+  const expHours = tf==='15m'?4 : tf==='1h'?12 : tf==='4h'?48 : 120;
+  const exp = new Date(Date.now()+expHours*60*60*1000).toISOString();
   const bullOK = htfBias==='bullish' || htfBias==='neutral';
   const bearOK = htfBias==='bearish' || htfBias==='neutral';
   const lastChoch = choch.slice(-1)[0];
@@ -335,6 +337,26 @@ export async function POST(req: NextRequest) {
         debugLog.push(`  → ${newSetups.length} setup(s) generated`);
 
         for (const setup of newSetups) {
+          // Reject setup if price already violated SL or hit TP (stale setup)
+          const currentPrice = analysis.price;
+          const isBull = setup.direction === 'bull';
+          if (isBull && currentPrice < setup.stop_loss) {
+            debugLog.push(`  → ${setup.direction} ${setup.setup_type} skipped: price ${currentPrice.toFixed(4)} already below SL ${setup.stop_loss}`);
+            continue;
+          }
+          if (!isBull && currentPrice > setup.stop_loss) {
+            debugLog.push(`  → ${setup.direction} ${setup.setup_type} skipped: price ${currentPrice.toFixed(4)} already above SL ${setup.stop_loss}`);
+            continue;
+          }
+          if (isBull && currentPrice >= setup.target) {
+            debugLog.push(`  → ${setup.direction} ${setup.setup_type} skipped: price already hit target`);
+            continue;
+          }
+          if (!isBull && currentPrice <= setup.target) {
+            debugLog.push(`  → ${setup.direction} ${setup.setup_type} skipped: price already hit target`);
+            continue;
+          }
+
           // Skip duplicates in last 8h
           const { data: existing } = await sb.from('setups').select('id')
             .eq('symbol', sym).eq('timeframe', tf).eq('direction', setup.direction)
