@@ -48,7 +48,7 @@ $ npm run build
    Collecting build traces ...
 
 Route (app)                              Size     First Load JS
-┌ ○ /                                    77.7 kB         165 kB
+┌ ○ /                                    79.5 kB         167 kB
 ├ ○ /_not-found                          871 B          87.9 kB
 ├ ƒ /api/agents/ai-brain                 0 B                0 B
 ├ ƒ /api/agents/alerts                   0 B                0 B
@@ -100,7 +100,7 @@ Route (app)                              Size     First Load JS
 ƒ  (Dynamic)  server-rendered on demand
 
 ​
-(build.command completed in 28s)
+(build.command completed in 28.4s)
 ​
 Functions bundling                                            
 ────────────────────────────────────────────────────────────────
