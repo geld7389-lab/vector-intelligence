@@ -51,20 +51,30 @@ function PriceRow({ symbol, price, change, changePct, history, currency = '' }: 
   symbol: string; price: number|null; change?: number|null; changePct?: number|null;
   history?: (number|null|undefined)[]; currency?: string;
 }) {
-  const up = (change ?? 0) >= 0;
-  const fmt = (v: number|null, d = 2) => v == null ? '—' : v.toFixed(d);
+  const up = (changePct ?? change ?? 0) >= 0;
+  const fmt = (v: number|null, d = 2) => v == null ? '—' : v >= 1000 ? v.toLocaleString(undefined,{minimumFractionDigits:d,maximumFractionDigits:d}) : v.toFixed(d);
+  const pctFmt = (v: number|null) => v == null ? '' : `${v>=0?'+':''}${v.toFixed(2)}%`;
   return (
-    <div className="flex items-center justify-between py-2.5 border-b border-zinc-800/50 last:border-0">
-      <div className="flex items-center gap-3 min-w-0">
-        <span className="text-xs font-mono text-zinc-300 w-20 shrink-0">{symbol}</span>
+    <div className="price-row">
+      <div style={{display:'flex',alignItems:'center',gap:10,minWidth:0}}>
+        <div style={{width:28,height:28,borderRadius:7,background:'var(--bg-3)',border:'1px solid var(--border)',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+          <span style={{fontSize:9,fontWeight:700,fontFamily:'JetBrains Mono',color:'var(--muted)',letterSpacing:'0.02em'}}>
+            {symbol.slice(0,3)}
+          </span>
+        </div>
+        <span style={{fontSize:12,fontWeight:600,fontFamily:'JetBrains Mono',color:'var(--text)',letterSpacing:'-0.01em'}}>{symbol}</span>
         {history && history.length > 2 && <Sparkline data={history} color={up ? '#22c55e' : '#ef4444'} />}
       </div>
-      <div className="flex items-center gap-4 shrink-0">
-        <span className="text-sm font-mono text-zinc-200">{currency}{fmt(price)}</span>
-        {change != null && (
-          <span className={cx('text-xs font-mono w-16 text-right', up ? 'text-emerald-400' : 'text-red-400')}>
-            {up ? '+' : ''}{fmt(change)} ({up ? '+' : ''}{fmt(changePct ?? null, 2)}%)
-          </span>
+      <div style={{display:'flex',alignItems:'center',gap:12,flexShrink:0}}>
+        <span style={{fontSize:13,fontFamily:'JetBrains Mono',fontWeight:600,color:'var(--text)',letterSpacing:'-0.02em'}}>{currency}{fmt(price)}</span>
+        {changePct != null && (
+          <span style={{
+            fontSize:11,fontFamily:'JetBrains Mono',fontWeight:600,
+            padding:'2px 7px',borderRadius:4,
+            background: up?'rgba(34,197,94,0.1)':'rgba(239,68,68,0.1)',
+            color: up?'#4ade80':'#f87171',
+            border: `1px solid ${up?'rgba(34,197,94,0.2)':'rgba(239,68,68,0.2)'}`,
+          }}>{pctFmt(changePct)}</span>
         )}
       </div>
     </div>
@@ -160,47 +170,72 @@ function SetupCard({ s, prices, onDelete, onAnalyze, onTrade, onSelect, selected
   const price = prices[s.symbol as keyof Prices];
   const isBull = s.direction === 'bull' || s.direction === 'long';
   const inZone = price != null && price >= s.entry_low && price <= s.entry_high;
-  const scoreColor = s.confluence_score >= 80 ? 'text-emerald-400' : s.confluence_score >= 65 ? 'text-yellow-400' : 'text-zinc-500';
+  const sc = s.confluence_score;
+  const scoreClass = sc >= 80 ? 'score-high' : sc >= 65 ? 'score-mid' : 'score-low';
 
   return (
-    <div onClick={() => onSelect(s)} className={cx('rounded-xl border p-3 cursor-pointer transition-all', selected ? 'border-zinc-500 bg-zinc-800/60' : 'border-zinc-800/60 bg-zinc-900/40 hover:border-zinc-700')}>
-      <div className="flex items-start justify-between gap-2">
-        <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-sm font-mono font-bold text-white">{s.symbol}</span>
-          <span className={cx('text-xs font-mono font-semibold', isBull ? 'text-emerald-400' : 'text-red-400')}>{isBull ? '↑ BULL' : '↓ BEAR'}</span>
-          <span className="text-xs text-zinc-500 bg-zinc-800 px-1.5 py-0.5 rounded">{s.setup_type}</span>
-          <span className="text-xs text-zinc-600">{s.timeframe}</span>
-          {s.cisd_confirmed && <span className="text-xs text-blue-400 bg-blue-900/30 px-1.5 py-0.5 rounded">CISD✓</span>}
-          {s.bos_level && <span className="text-xs text-purple-400 bg-purple-900/30 px-1.5 py-0.5 rounded">BOS</span>}
-          {s.choch_level && <span className="text-xs text-orange-400 bg-orange-900/30 px-1.5 py-0.5 rounded">CHoCH</span>}
-          {inZone && <span className="text-xs text-yellow-400 bg-yellow-900/30 px-1.5 py-0.5 rounded animate-pulse">IN ZONE</span>}
+    <div
+      onClick={() => onSelect(s)}
+      className={cx('setup-card', isBull ? 'bull-card' : 'bear-card', selected ? 'selected' : '')}
+    >
+      {/* TOP ROW */}
+      <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',gap:8}}>
+        <div style={{display:'flex',alignItems:'center',gap:6,flexWrap:'wrap'}}>
+          <span style={{fontSize:13,fontFamily:'JetBrains Mono',fontWeight:700,color:'var(--text)'}}>{s.symbol}</span>
+          <span className={cx('badge', isBull ? 'badge-green' : 'badge-red')}>
+            {isBull ? 'LONG' : 'SHORT'}
+          </span>
+          <span className="badge badge-gray">{s.timeframe}</span>
+          <span className="badge badge-gray" style={{maxWidth:180,overflow:'hidden',textOverflow:'ellipsis'}}>{s.setup_type}</span>
+          {s.cisd_confirmed && <span className="badge badge-blue">CISD</span>}
+          {s.choch_level && <span className="badge badge-purple">CHoCH</span>}
+          {s.bos_level && <span className="badge badge-purple">BOS</span>}
+          {inZone && <span className="badge badge-amber" style={{animation:'pulse-dot 1.5s infinite'}}>IN ZONE</span>}
         </div>
-        <div className="flex items-center gap-2 shrink-0">
-          <span className={cx('text-xs font-mono font-bold', scoreColor)}>{s.confluence_score}</span>
-          <span className="text-xs text-zinc-500">{s.status}</span>
-        </div>
+        <div className={cx('score-ring', scoreClass)}>{sc}</div>
       </div>
 
-      <div className="mt-2 grid grid-cols-3 gap-x-4 gap-y-1 text-xs font-mono">
-        <div><span className="text-zinc-600">Entry </span><span className="text-zinc-300">{s.entry_low}–{s.entry_high}</span></div>
-        <div><span className="text-zinc-600">SL </span><span className="text-red-400">{s.stop_loss}</span></div>
-        <div><span className="text-zinc-600">TP </span><span className="text-emerald-400">{s.target}</span></div>
-        <div><span className="text-zinc-600">RR </span><span className="text-zinc-300">{s.rr_ratio}R</span></div>
-        <div><span className="text-zinc-600">Vol </span><span className={s.volume_context === 'high' ? 'text-emerald-400' : s.volume_context === 'low' ? 'text-red-400' : 'text-zinc-400'}>{s.volume_context}</span></div>
-        <div><span className="text-zinc-600">Price </span><span className={inZone ? 'text-yellow-400' : 'text-zinc-400'}>{price?.toFixed(1) ?? '—'}</span></div>
+      {/* PRICE GRID */}
+      <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:'4px 16px',marginTop:10}}>
+        {[
+          {l:'Entry',v:`${s.entry_low}–${s.entry_high}`,c:'var(--text-2)'},
+          {l:'Stop',v:String(s.stop_loss),c:'var(--red-3)'},
+          {l:'Target',v:String(s.target),c:'var(--green-3)'},
+          {l:'R:R',v:`${s.rr_ratio}R`,c:'var(--text)'},
+          {l:'Vol',v:s.volume_context,c:s.volume_context==='high'?'var(--green-3)':s.volume_context==='low'?'var(--red-3)':'var(--text-2)'},
+          {l:'Live',v:price?.toFixed(1)??'—',c:inZone?'var(--amber-3)':'var(--text-2)'},
+        ].map(({l,v,c})=>(
+          <div key={l} style={{display:'flex',gap:4,alignItems:'baseline'}}>
+            <span style={{fontSize:10,color:'var(--muted)',fontWeight:600,letterSpacing:'0.05em',textTransform:'uppercase',flexShrink:0}}>{l}</span>
+            <span style={{fontSize:11,fontFamily:'JetBrains Mono',fontWeight:600,color:c,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{v}</span>
+          </div>
+        ))}
       </div>
-      <div className="mt-1.5 text-xs text-zinc-600 truncate">{s.dol_target} · HTF {s.htf_bias}</div>
 
-      <div className="mt-2 flex items-center gap-2" onClick={e => e.stopPropagation()}>
-        <button onClick={() => onAnalyze(s)} className="text-xs px-2 py-1 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-zinc-200 transition-colors">AI</button>
-        <button onClick={() => onTrade(s)} className="text-xs px-2 py-1 rounded bg-emerald-900/40 hover:bg-emerald-900/70 text-emerald-400 transition-colors">Log</button>
-        <button onClick={() => setShowChart(p => !p)} className="text-xs px-2 py-1 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-400 transition-colors">{showChart ? 'Hide' : 'Chart'}</button>
-        <button onClick={() => onDelete(s.id)} className="text-xs px-2 py-1 rounded hover:bg-red-900/30 text-zinc-700 hover:text-red-400 transition-colors">✕</button>
+      {/* DOL TARGET */}
+      {s.dol_target && (
+        <div style={{marginTop:8,padding:'5px 8px',borderRadius:5,background:'var(--bg-3)',border:'1px solid var(--border)'}}>
+          <span style={{fontSize:10,color:'var(--muted)',fontFamily:'JetBrains Mono',lineHeight:1.5}}>{s.dol_target}</span>
+        </div>
+      )}
+
+      {/* ACTIONS */}
+      <div style={{marginTop:10,display:'flex',alignItems:'center',gap:6}} onClick={e=>e.stopPropagation()}>
+        <button onClick={()=>onAnalyze(s)} className="btn btn-ghost btn-xs"><Icons.Brain/>AI</button>
+        <button onClick={()=>onTrade(s)} className="btn btn-xs" style={{background:'rgba(34,197,94,0.1)',color:'var(--green-3)',border:'1px solid rgba(34,197,94,0.2)'}}>
+          <Icons.Check/>Log Trade
+        </button>
+        <button onClick={()=>setShowChart(p=>!p)} className="btn btn-ghost btn-xs">
+          <Icons.Chart/>{showChart?'Hide':'Chart'}
+        </button>
+        <button onClick={()=>onDelete(s.id)} className="btn btn-ghost btn-xs" style={{marginLeft:'auto',color:'var(--muted)'}}>
+          <Icons.X/>
+        </button>
       </div>
 
       {showChart && (
-        <div onClick={e => e.stopPropagation()}>
-          <CandleChart symbol={s.symbol} timeframe={s.timeframe} entry_low={s.entry_low} entry_high={s.entry_high} stop_loss={s.stop_loss} target={s.target} />
+        <div onClick={e=>e.stopPropagation()} style={{marginTop:8}}>
+          <CandleChart symbol={s.symbol} timeframe={s.timeframe} entry_low={s.entry_low} entry_high={s.entry_high} stop_loss={s.stop_loss} target={s.target}/>
         </div>
       )}
     </div>
@@ -630,31 +665,69 @@ function WeeklyBiasPanel({ onBiasChange }: { onBiasChange?: (b: Record<string,st
 function SMTPanel() {
   const [signals, setSignals] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+  const [ran, setRan] = useState(false);
+
   const run = async () => {
     setLoading(true);
-    await fetch('/api/smt', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({}) });
-    const r = await fetch('/api/smt');
-    const d = await r.json();
-    setSignals((d.signals ?? d.recent ?? []).slice(0, 8));
+    try {
+      const r = await fetch('/api/smt', { method:'POST', headers:{'Content-Type':'application/json'}, body:'{}' });
+      const d = await r.json();
+      setSignals((d.signals ?? d.recent ?? []).slice(0, 8));
+      setRan(true);
+    } catch {}
     setLoading(false);
   };
-  useEffect(() => { fetch('/api/smt').then(r=>r.json()).then(d=>setSignals((d.recent??[]).slice(0,8))); }, []);
+
+  useEffect(() => {
+    fetch('/api/smt').then(r=>r.json()).then(d=>{
+      const items = d.recent ?? d.signals ?? [];
+      setSignals(items.slice(0,8));
+      if (items.length>0) setRan(true);
+    }).catch(()=>{});
+  }, []);
+
+  const isBull = (s:any) => (s.divergence_type??s.type??'').includes('bull');
+
   return (
-    <div className="rounded-xl border border-zinc-800/60 bg-zinc-900/30 p-3">
-      <div className="flex items-center justify-between mb-3">
-        <span className="text-xs text-zinc-500 uppercase tracking-wider">SMT Divergence</span>
-        <button onClick={run} disabled={loading} className="text-xs px-2.5 py-1 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-400 disabled:opacity-50">{loading?'Scanning…':'Scan SMT'}</button>
+    <div className="card card-sm">
+      <div className="section-hdr">
+        <span className="section-title" style={{marginBottom:0}}>SMT Divergence</span>
+        <button onClick={run} disabled={loading} className="btn btn-ghost btn-xs"
+          style={{gap:4}}>
+          <span className={loading?'spin':''}><Icons.Scan/></span>
+          {loading ? 'Scanning…' : 'Scan'}
+        </button>
       </div>
-      {signals.length === 0 ? <p className="text-xs text-zinc-700 text-center py-4">No recent SMT — click Scan</p>
-        : signals.map((s,i) => (
-          <div key={i} className="flex items-center justify-between py-1.5 border-b border-zinc-800/40 last:border-0">
-            <div>
-              <span className={cx('text-xs font-semibold', s.divergence_type?.includes('bull') || s.type?.includes('bull') ? 'text-emerald-400' : 'text-red-400')}>{s.divergence_type ?? s.type}</span>
-              <span className="text-xs text-zinc-600 ml-2">{s.notes ?? s.description}</span>
+
+      {signals.length === 0 ? (
+        <div className="empty-state" style={{padding:'28px 16px'}}>
+          <Icons.Activity/>
+          <p style={{fontSize:11}}>{ran ? 'No SMT divergence detected on current data' : 'Click Scan to detect SMT divergence'}</p>
+        </div>
+      ) : (
+        <div style={{display:'flex',flexDirection:'column',gap:6,marginTop:8}}>
+          {signals.map((s,i) => (
+            <div key={i} className={cx('smt-card', (s.divergence_type??s.type??'').includes('div')?'diverge':'')}>
+              <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8}}>
+                <div style={{display:'flex',alignItems:'center',gap:6}}>
+                  <span className={cx('badge', isBull(s)?'badge-green':'badge-red')}>
+                    {isBull(s)?'BULL':'BEAR'}
+                  </span>
+                  <span style={{fontSize:11,fontWeight:600,color:'var(--text-2)',fontFamily:'JetBrains Mono'}}>
+                    {s.pair ?? `${s.nq_swing??''}/${s.es_swing??''}`}
+                  </span>
+                </div>
+                <span style={{fontSize:10,color:'var(--muted)',fontFamily:'JetBrains Mono'}}>
+                  {s.detected_at ? new Date(s.detected_at).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}) : 'live'}
+                </span>
+              </div>
+              <p style={{fontSize:11,color:'var(--muted)',marginTop:4,lineHeight:1.5}}>
+                {s.notes ?? s.description ?? `${s.nq_swing} vs ${s.es_swing} divergence`}
+              </p>
             </div>
-            <span className="text-xs text-zinc-700 font-mono">{s.detected_at ? new Date(s.detected_at).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}) : '—'}</span>
-          </div>
-        ))}
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -1677,66 +1750,114 @@ export default function App() {
   const MKT_TABS: MkTab[] = ['Futures','Crypto','Forex','Stocks','Institutional'];
 
   return (
-    <div className="h-screen flex flex-col bg-zinc-950 text-zinc-200 overflow-hidden" style={{fontFamily:'ui-monospace,SFMono-Regular,monospace'}}>
+    <div style={{height:'100dvh',display:'flex',flexDirection:'column',background:'var(--bg)',color:'var(--text)',overflow:'hidden'}}>
       {/* TOASTS */}
-      <div className="fixed top-4 right-4 z-50 space-y-2 pointer-events-none">
+      <div style={{position:'fixed',top:16,right:16,zIndex:999,display:'flex',flexDirection:'column',gap:8,pointerEvents:'none'}}>
         {toasts.map(a => (
-          <div key={a.id} className={cx('px-3 py-2 rounded-xl text-xs border shadow-xl backdrop-blur',
-            a.type==='r'?'bg-red-900/90 border-red-700 text-red-200':
-            a.type==='g'?'bg-emerald-900/90 border-emerald-700 text-emerald-200':
-            'bg-zinc-800/90 border-zinc-600 text-zinc-200')}>{a.msg}
-          </div>
+          <div key={a.id} className="fade-up" style={{
+            padding:'8px 14px',borderRadius:8,fontSize:12,fontWeight:500,
+            backdropFilter:'blur(16px)',border:'1px solid',boxShadow:'0 8px 32px rgba(0,0,0,0.4)',
+            background: a.type==='r'?'rgba(220,38,38,0.12)':a.type==='g'?'rgba(34,197,94,0.12)':'rgba(255,255,255,0.06)',
+            borderColor: a.type==='r'?'rgba(239,68,68,0.3)':a.type==='g'?'rgba(34,197,94,0.3)':'rgba(255,255,255,0.1)',
+            color: a.type==='r'?'#f87171':a.type==='g'?'#4ade80':'#e2e2e5',
+          }}>{a.msg}</div>
         ))}
       </div>
 
       {/* HEADER */}
-      <header className="border-b border-zinc-800/60 px-4 py-2 flex items-center justify-between sticky top-0 bg-zinc-950/95 backdrop-blur-sm z-40 gap-2">
-        <div className="flex items-center gap-3 shrink-0">
-          <span className="text-sm font-bold tracking-widest text-white">VECTOR</span>
-          <div className={cx('w-1.5 h-1.5 rounded-full', prices.NQ ? 'bg-emerald-500 animate-pulse' : 'bg-zinc-700')}/>
-          {kz && (
-            <span className="text-xs hidden sm:flex items-center gap-1.5">
-              {kz.active ? <span className={cx('font-semibold', kz.active.color==='yellow'?'text-yellow-400':kz.active.color==='green'?'text-emerald-400':'text-blue-400')}>{kz.active.short}</span>
-                : <span className="text-zinc-700">OFF</span>}
-              <span className="text-zinc-700">{kz.nyTime}</span>
-            </span>
-          )}
-          {dangerNews && <span className="text-xs text-red-400 animate-pulse font-semibold hidden sm:block">NEWS</span>}
-          {nextEvent && !dangerNews && <span className="text-xs text-zinc-600 hidden sm:block">{nextEvent.name} {nextEvent.diffMin != null ? `${nextEvent.diffMin}m` : ''}</span>}
+      <header style={{
+        height:48,flexShrink:0,display:'flex',alignItems:'center',
+        padding:'0 20px',gap:16,
+        borderBottom:'1px solid var(--border)',
+        background:'rgba(7,7,8,0.95)',backdropFilter:'blur(20px)',
+        position:'relative',zIndex:40,
+      }}>
+        {/* Logo */}
+        <div style={{display:'flex',alignItems:'center',gap:8,flexShrink:0}}>
+          <span style={{fontFamily:'JetBrains Mono',fontWeight:700,fontSize:13,letterSpacing:'0.12em',color:'#fff'}}>VECTOR</span>
+          <div style={{width:5,height:5,borderRadius:'50%',background:prices.NQ?'var(--green-2)':'#3f3f46',
+            boxShadow:prices.NQ?'0 0 0 3px rgba(34,197,94,0.2)':'none',transition:'all 0.3s'}}/>
         </div>
 
-        <div className="flex items-center gap-3 overflow-x-auto flex-1 justify-center">
+        <div style={{width:1,height:20,background:'var(--border)',flexShrink:0}}/>
+
+        {/* Live prices ticker */}
+        <div style={{display:'flex',alignItems:'center',gap:20,flex:1,overflow:'hidden'}}>
           {(['NQ','ES','GC','DXY','VIX'] as const).map(s => (
-            <span key={s} className="text-xs shrink-0 font-mono">
-              <span className="text-zinc-600">{s} </span>
-              <span className="text-zinc-300">{s==='DXY'?pFmt(s,3):s==='VIX'?pFmt(s,2):pFmt(s,1)}</span>
-            </span>
+            <div key={s} style={{display:'flex',alignItems:'baseline',gap:5,flexShrink:0}}>
+              <span style={{fontSize:10,fontFamily:'JetBrains Mono',color:'var(--muted)',fontWeight:500}}>{s}</span>
+              <span style={{fontSize:13,fontFamily:'JetBrains Mono',fontWeight:600,color:'#e2e2e5',letterSpacing:'-0.01em'}}>
+                {s==='DXY'?pFmt(s,3):s==='VIX'?pFmt(s,2):pFmt(s,1)}
+              </span>
+            </div>
           ))}
         </div>
 
-        <div className="flex items-center gap-2 shrink-0">
-          <button onClick={()=>setShowTelegram(true)} title="Telegram alerts" className="p-1.5 rounded-lg text-zinc-600 hover:text-zinc-300 hover:bg-zinc-800 transition-colors"><Icons.Bell /></button>
-          <button onClick={()=>setShowScan(true)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-zinc-800 border border-zinc-700 text-xs text-zinc-300 hover:border-zinc-500 transition-colors"><Icons.Scan /> Scan</button>
+        {/* Right side */}
+        <div style={{display:'flex',alignItems:'center',gap:8,flexShrink:0}}>
+          {kz?.active && (
+            <span style={{fontSize:10,fontFamily:'JetBrains Mono',fontWeight:600,padding:'2px 8px',borderRadius:4,
+              background:'rgba(34,197,94,0.1)',color:'#4ade80',border:'1px solid rgba(34,197,94,0.2)',letterSpacing:'0.05em'}}>
+              {kz.active.short}
+            </span>
+          )}
+          {dangerNews && (
+            <span style={{fontSize:10,fontFamily:'JetBrains Mono',fontWeight:600,padding:'2px 8px',borderRadius:4,
+              background:'rgba(239,68,68,0.1)',color:'#f87171',border:'1px solid rgba(239,68,68,0.2)',
+              animation:'pulse-dot 1.5s ease-in-out infinite',letterSpacing:'0.05em'}}>
+              NEWS
+            </span>
+          )}
+          <button onClick={()=>setShowTelegram(true)} style={{
+            width:32,height:32,borderRadius:7,border:'1px solid var(--border)',
+            background:'rgba(255,255,255,0.04)',color:'var(--muted)',cursor:'pointer',
+            display:'flex',alignItems:'center',justifyContent:'center',transition:'all 0.15s',
+          }} onMouseEnter={e=>{e.currentTarget.style.color='var(--text)';e.currentTarget.style.borderColor='var(--border-2)';}}
+             onMouseLeave={e=>{e.currentTarget.style.color='var(--muted)';e.currentTarget.style.borderColor='var(--border)';}}>
+            <Icons.Bell/>
+          </button>
+          <button onClick={()=>setShowScan(true)} className="btn btn-ghost" style={{fontSize:11,padding:'5px 12px',gap:5}}>
+            <Icons.Scan/>Scan
+          </button>
         </div>
       </header>
 
-      {/* NAV */}
-      <nav className="border-b border-zinc-800/60 px-4 flex overflow-x-auto">
-        {TABS.map(t => (
-          <button key={t} onClick={()=>setTab(t)} className={cx('px-4 py-2.5 text-xs border-b-2 transition-all whitespace-nowrap',
-            tab===t?'border-zinc-400 text-zinc-200':'border-transparent text-zinc-600 hover:text-zinc-400')}>
-            {t}{t==='Setups'&&setups.length>0?` ·${setups.length}`:''}{t==='Markets'&&smtBadge>0?` (${smtBadge})` : ''}
-          </button>
-        ))}
+      {/* NAV TABS */}
+      <nav style={{
+        display:'flex',alignItems:'center',padding:'0 20px',gap:0,
+        borderBottom:'1px solid var(--border)',background:'var(--bg-1)',flexShrink:0,
+        overflowX:'auto',
+      }}>
+        {TABS.map(t => {
+          const count = t==='Setups'&&setups.length>0?setups.length:t==='Markets'&&smtBadge>0?smtBadge:0;
+          return (
+            <button key={t} className={`ul-tab${tab===t?' active':''}`} onClick={()=>setTab(t)}
+              style={{fontSize:12}}>
+              {t}{count>0&&<span style={{marginLeft:5,fontSize:9,fontFamily:'JetBrains Mono',fontWeight:700,
+                padding:'1px 5px',borderRadius:3,background:'rgba(34,197,94,0.15)',color:'var(--green-2)'}}>{count}</span>}
+            </button>
+          );
+        })}
       </nav>
 
-      <main className="flex-1 overflow-y-auto max-w-5xl mx-auto w-full px-4 py-4">
+      {/* MAIN */}
+      <main style={{flex:1,overflowY:'auto',padding:'20px'}}>
+        <div style={{maxWidth:960,margin:'0 auto'}}>
+
         {tab === 'Markets' && (
-          <div className="space-y-3">
-            <div className="flex gap-1.5 overflow-x-auto pb-1">
-              {MKT_TABS.map(t => <button key={t} onClick={()=>setMktTab(t)} className={cx('px-3 py-1.5 rounded-lg text-xs border transition-all whitespace-nowrap', mktTab===t?'bg-zinc-800 border-zinc-600 text-white':'border-zinc-800 text-zinc-600 hover:border-zinc-700')}>{t}</button>)}
+          <div style={{display:'flex',flexDirection:'column',gap:16}}>
+            <div className="pill-tabs" style={{alignSelf:'flex-start'}}>
+              {MKT_TABS.map(t => (
+                <button key={t} className={`pill-tab${mktTab===t?' active':''}`} onClick={()=>setMktTab(t)}>{t}</button>
+              ))}
             </div>
-            {mktTab === 'Futures' && <div className="space-y-3"><WeeklyBiasPanel/><CalendarWidget/><SMTPanel/></div>}
+            {mktTab === 'Futures' && (
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:16}}>
+                <div style={{gridColumn:'1/-1'}}><WeeklyBiasPanel/></div>
+                <CalendarWidget/>
+                <SMTPanel/>
+              </div>
+            )}
             {mktTab === 'Crypto' && <CryptoTab/>}
             {mktTab === 'Forex' && <ForexTab/>}
             {mktTab === 'Stocks' && <StocksTab/>}
@@ -1745,19 +1866,36 @@ export default function App() {
         )}
 
         {tab === 'Setups' && (
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <span className="text-xs text-zinc-600 uppercase tracking-wider">Active Setups · {setups.length}</span>
-              <button onClick={()=>setShowScan(true)} className="text-xs px-3 py-1.5 rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-400 hover:border-zinc-500">+ Scan</button>
+          <div style={{display:'flex',flexDirection:'column',gap:12}}>
+            <div style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+              <div style={{display:'flex',alignItems:'center',gap:8}}>
+                <span style={{fontSize:11,color:'var(--muted)',fontWeight:500,letterSpacing:'0.06em',textTransform:'uppercase'}}>
+                  Active Setups
+                </span>
+                {setups.length>0&&<span className="badge badge-green">{setups.length}</span>}
+              </div>
+              <button onClick={()=>setShowScan(true)} className="btn btn-ghost" style={{fontSize:11,padding:'5px 12px'}}>
+                <Icons.Plus/> Scan
+              </button>
             </div>
-            {dangerNews && <div className="rounded-xl border border-red-800/50 bg-red-900/20 px-3 py-2 text-xs text-red-300">High-impact news active — elevated risk</div>}
+            {dangerNews && (
+              <div style={{padding:'8px 12px',borderRadius:8,background:'rgba(239,68,68,0.06)',
+                border:'1px solid rgba(239,68,68,0.15)',fontSize:12,color:'#f87171',display:'flex',alignItems:'center',gap:6}}>
+                <span style={{width:6,height:6,borderRadius:'50%',background:'#ef4444',flexShrink:0,animation:'pulse-dot 1.5s infinite'}}/>
+                High-impact news active — elevated risk
+              </div>
+            )}
             {setups.length === 0 ? (
-              <div className="text-center py-20 space-y-3">
-                <p className="text-zinc-600 text-sm">No setups — run a scan to detect ICT setups</p>
-                <button onClick={()=>setShowScan(true)} className="px-4 py-2 rounded-lg bg-zinc-800 border border-zinc-700 text-xs text-zinc-400 hover:border-zinc-500">Scan Market</button>
+              <div style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',
+                padding:'80px 20px',gap:12,textAlign:'center'}}>
+                <Icons.Target/>
+                <p style={{color:'var(--muted)',fontSize:13}}>No setups found — run a scan to detect ICT patterns</p>
+                <button onClick={()=>setShowScan(true)} className="btn btn-ghost" style={{marginTop:4}}>
+                  <Icons.Scan/> Scan Market
+                </button>
               </div>
             ) : (
-              <div className="space-y-2">
+              <div style={{display:'flex',flexDirection:'column',gap:6}}>
                 {setups.map(s => (
                   <div key={s.id}>
                     <SetupCard s={s} prices={prices} onDelete={deleteSetup}
@@ -1780,6 +1918,8 @@ export default function App() {
         {tab === 'Knowledge' && <KnowledgeTab/>}
         {tab === 'Backtest' && <BacktestTab/>}
         {tab === 'Agents' && <AgentsTab/>}
+
+        </div>
       </main>
 
       {showScan && <ScanModal prices={prices} onClose={()=>setShowScan(false)} onDone={()=>{setShowScan(false);loadSetups();setTab('Setups');}}/>}
