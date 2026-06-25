@@ -48,7 +48,7 @@ $ npm run build
    Collecting build traces ...
 
 Route (app)                              Size     First Load JS
-┌ ○ /                                    79.5 kB         167 kB
+┌ ○ /                                    82 kB           169 kB
 ├ ○ /_not-found                          871 B          87.9 kB
 ├ ƒ /api/agents/ai-brain                 0 B                0 B
 ├ ƒ /api/agents/alerts                   0 B                0 B
@@ -78,11 +78,15 @@ Route (app)                              Size     First Load JS
 ├ ƒ /api/market                          0 B                0 B
 ├ ƒ /api/migrate                         0 B                0 B
 ├ ƒ /api/monitor                         0 B                0 B
+├ ƒ /api/mt5/account                     0 B                0 B
+├ ƒ /api/mt5/connect                     0 B                0 B
+├ ƒ /api/mt5/trade                       0 B                0 B
 ├ ƒ /api/news                            0 B                0 B
 ├ ƒ /api/newsfeed                        0 B                0 B
 ├ ƒ /api/prices                          0 B                0 B
 ├ ƒ /api/scanner                         0 B                0 B
 ├ ƒ /api/setups                          0 B                0 B
+├ ƒ /api/setups/monitor                  0 B                0 B
 ├ ƒ /api/smt                             0 B                0 B
 ├ ƒ /api/stocks                          0 B                0 B
 ├ ƒ /api/telegram                        0 B                0 B
@@ -100,7 +104,7 @@ Route (app)                              Size     First Load JS
 ƒ  (Dynamic)  server-rendered on demand
 
 ​
-(build.command completed in 28.4s)
+(build.command completed in 29.8s)
 ​
 Functions bundling                                            
 ────────────────────────────────────────────────────────────────
@@ -109,7 +113,7 @@ Packaging Functions from .netlify/functions-internal directory:
  - ___netlify-server-handler/___netlify-server-handler.mjs
 ​
 ​
-(Functions bundling completed in 1.3s)
+(Functions bundling completed in 1.4s)
 Deploy path:        /home/runner/work/vector-intelligence/vector-intelligence/.next
 Configuration path: /home/runner/work/vector-intelligence/vector-intelligence/netlify.toml
 Deploying to main site URL...
