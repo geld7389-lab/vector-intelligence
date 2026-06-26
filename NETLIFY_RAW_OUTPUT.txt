@@ -116,7 +116,7 @@ Packaging Functions from .netlify/functions-internal directory:
  - ___netlify-server-handler/___netlify-server-handler.mjs
 ​
 ​
-(Functions bundling completed in 1.2s)
+(Functions bundling completed in 1.1s)
 Deploy path:        /home/runner/work/vector-intelligence/vector-intelligence/.next
 Configuration path: /home/runner/work/vector-intelligence/vector-intelligence/netlify.toml
 Deploying to main site URL...
