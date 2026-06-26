@@ -80,6 +80,7 @@ Route (app)                              Size     First Load JS
 ├ ƒ /api/monitor                         0 B                0 B
 ├ ƒ /api/mt5/account                     0 B                0 B
 ├ ƒ /api/mt5/connect                     0 B                0 B
+├ ƒ /api/mt5/register                    0 B                0 B
 ├ ƒ /api/mt5/status                      0 B                0 B
 ├ ƒ /api/mt5/trade                       0 B                0 B
 ├ ƒ /api/news                            0 B                0 B
@@ -105,7 +106,7 @@ Route (app)                              Size     First Load JS
 ƒ  (Dynamic)  server-rendered on demand
 
 ​
-(build.command completed in 29.6s)
+(build.command completed in 29.7s)
 ​
 Functions bundling                                            
 ────────────────────────────────────────────────────────────────
