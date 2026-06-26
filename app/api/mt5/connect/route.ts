@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 
 const METAAPI_TOKEN = process.env.METAAPI_TOKEN ?? '';
 const BASE = 'https://mt-provisioning-api-v1.agiliumtrade.agiliumtrade.ai';
+const MGMT_BASE = 'https://mt-provisioning-api-v1.agiliumtrade.agiliumtrade.ai';
 
 // Connect an MT5 account to MetaApi cloud — fully online, no local install needed
 export async function POST(req: NextRequest) {
@@ -80,24 +81,30 @@ export async function POST(req: NextRequest) {
 // Get connected accounts
 export async function GET(_req: NextRequest) {
   if (!METAAPI_TOKEN) {
-    return NextResponse.json({ accounts: [], error: 'METAAPI_TOKEN not set' });
+    return NextResponse.json({ accounts: [], error: 'METAAPI_TOKEN not set — add METAAPI_TOKEN to Vercel env vars' });
   }
   try {
-    const res = await fetch(`${BASE}/users/current/accounts?limit=100`, {
+    const res = await fetch(`${BASE}/users/current/accounts?limit=100&offset=0`, {
       headers: { 'auth-token': METAAPI_TOKEN },
+      cache: 'no-store',
     });
-    if (!res.ok) return NextResponse.json({ accounts: [], error: `MetaApi ${res.status}` });
-    const data = await res.json();
-    const accounts = (data.items ?? data ?? []).map((a: any) => ({
-      id: a._id ?? a.id,
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      return NextResponse.json({ accounts: [], error: `MetaApi ${res.status}: ${errData.message ?? JSON.stringify(errData)}` });
+    }
+    const raw = await res.json();
+    // MetaApi returns array directly or { items: [] }
+    const list: any[] = Array.isArray(raw) ? raw : (raw.items ?? raw.accounts ?? []);
+    const accounts = list.map((a: any) => ({
+      id: a._id ?? a.id ?? a.accountId,
       name: a.name,
       login: a.login,
       server: a.server,
-      platform: a.platform,
+      platform: a.platform ?? 'mt5',
       state: a.state,
-      connectionStatus: a.connectionStatus,
+      connectionStatus: a.connectionStatus ?? a.state,
     }));
-    return NextResponse.json({ accounts });
+    return NextResponse.json({ accounts, total: accounts.length });
   } catch (err) {
     return NextResponse.json({ accounts: [], error: err instanceof Error ? err.message : String(err) });
   }

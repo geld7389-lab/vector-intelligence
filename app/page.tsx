@@ -1253,20 +1253,26 @@ function AgentsTab() {
   const [mt5Accounts, setMt5Accounts] = React.useState<any[]>([]);
   const [mt5AccountInfo, setMt5AccountInfo] = React.useState<any>(null);
   const [mt5Loading, setMt5Loading] = React.useState(false);
+  const [mt5Error, setMt5Error] = React.useState<string|null>(null);
 
   const loadMt5Accounts = React.useCallback(async () => {
+    setMt5Loading(true); setMt5Error(null);
     try {
       const r = await fetch('/api/mt5/connect');
       const d = await r.json();
+      if (d.error) { setMt5Error(d.error); setMt5Accounts([]); setMt5Loading(false); return; }
       setMt5Accounts(d.accounts ?? []);
       // Auto-load account info for first connected account
-      const connected = (d.accounts ?? []).find((a: any) => a.connectionStatus === 'CONNECTED');
+      const connected = (d.accounts ?? []).find((a: any) =>
+        a.connectionStatus === 'CONNECTED' || a.state === 'DEPLOYED'
+      );
       if (connected) {
         const r2 = await fetch(`/api/mt5/account?accountId=${connected.id}`);
         const d2 = await r2.json();
         setMt5AccountInfo({ ...d2, accountId: connected.id, accountName: connected.name });
       }
-    } catch {}
+    } catch(e: any) { setMt5Error(e.message); }
+    setMt5Loading(false);
   }, []);
 
   const connectMt5 = async () => {
@@ -1280,7 +1286,20 @@ function AgentsTab() {
       });
       const d = await r.json();
       setMt5Result(d);
-      if (d.success) { loadMt5Accounts(); setMt5Tab('status'); }
+      if (d.success) {
+        // Wait 3s then switch to accounts tab and refresh
+        setTimeout(() => {
+          setMt5Tab('status');
+          loadMt5Accounts();
+        }, 3000);
+        // Keep refreshing every 10s for 2min while broker connects
+        let attempts = 0;
+        const iv = setInterval(() => {
+          attempts++;
+          loadMt5Accounts();
+          if (attempts >= 12) clearInterval(iv);
+        }, 10000);
+      }
     } catch (e: any) { setMt5Result({ error: e.message }); }
     setMt5Connecting(false);
   };
@@ -1564,7 +1583,13 @@ function AgentsTab() {
 
         {mt5Tab === 'status' && (
           <div>
-            {mt5Accounts.length === 0 ? (
+            {mt5Loading && <div className="text-center py-4 text-xs text-zinc-600">↻ Loading accounts...</div>}
+            {mt5Error && (
+              <div className="rounded-lg border border-red-800 bg-red-900/10 p-3 text-xs text-red-400 mb-3">
+                {mt5Error}
+              </div>
+            )}
+            {!mt5Loading && mt5Accounts.length === 0 && (
               <div className="text-center py-8">
                 <div className="text-xs text-zinc-600 mb-2">No MT5 accounts connected</div>
                 <div className="text-[10px] text-zinc-700 mb-4">Connect your MT5 demo or live account to enable cloud trading</div>
@@ -1577,7 +1602,8 @@ function AgentsTab() {
                   + Connect MT5 Account
                 </button>
               </div>
-            ) : (
+            )}
+            {mt5Accounts.length > 0 && (
               <div className="space-y-3">
                 {mt5Accounts.map((acc: any) => (
                   <div key={acc.id} className="rounded-lg border border-zinc-800 bg-zinc-950 p-3">
@@ -1590,7 +1616,7 @@ function AgentsTab() {
                       <div className="flex items-center gap-2">
                         <span className={cx('text-[10px] px-2 py-0.5 rounded font-bold',
                           acc.connectionStatus==='CONNECTED'?'bg-emerald-900/60 text-emerald-400':'bg-zinc-800 text-zinc-500')}>
-                          {acc.connectionStatus ?? acc.state}
+                          {acc.connectionStatus ?? acc.state ?? 'CONNECTING'}
                         </span>
                         <span className="text-[10px] text-zinc-600">{acc.platform?.toUpperCase()}</span>
                       </div>
