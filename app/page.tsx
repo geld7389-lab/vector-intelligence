@@ -1287,18 +1287,15 @@ function AgentsTab() {
       const d = await r.json();
       setMt5Result(d);
       if (d.success) {
-        // Wait 3s then switch to accounts tab and refresh
-        setTimeout(() => {
-          setMt5Tab('status');
-          loadMt5Accounts();
-        }, 3000);
-        // Keep refreshing every 10s for 2min while broker connects
+        setMt5Tab('status');
+        // Poll accounts every 8s for 3 minutes while MetaApi connects to broker
         let attempts = 0;
-        const iv = setInterval(() => {
+        const iv = setInterval(async () => {
           attempts++;
-          loadMt5Accounts();
-          if (attempts >= 12) clearInterval(iv);
-        }, 10000);
+          await loadMt5Accounts();
+          if (attempts >= 22) clearInterval(iv); // ~3 minutes
+        }, 8000);
+        loadMt5Accounts();
       }
     } catch (e: any) { setMt5Result({ error: e.message }); }
     setMt5Connecting(false);
@@ -1615,8 +1612,14 @@ function AgentsTab() {
                       </div>
                       <div className="flex items-center gap-2">
                         <span className={cx('text-[10px] px-2 py-0.5 rounded font-bold',
-                          acc.connectionStatus==='CONNECTED'?'bg-emerald-900/60 text-emerald-400':'bg-zinc-800 text-zinc-500')}>
-                          {acc.connectionStatus ?? acc.state ?? 'CONNECTING'}
+                          acc.state==='DEPLOYED'?'bg-emerald-900/60 text-emerald-400':
+                          acc.state==='DEPLOYING'?'bg-amber-900/60 text-amber-400':
+                          acc.state==='ERROR'?'bg-red-900/60 text-red-400':
+                          'bg-zinc-800 text-zinc-500')}>
+                          {acc.state === 'DEPLOYING' ? '⟳ CONNECTING...' :
+                           acc.state === 'DEPLOYED' ? '● CONNECTED' :
+                           acc.state === 'ERROR' ? '✗ ERROR' :
+                           acc.state ?? 'UNKNOWN'}
                         </span>
                         <span className="text-[10px] text-zinc-600">{acc.platform?.toUpperCase()}</span>
                       </div>
