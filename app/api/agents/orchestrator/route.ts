@@ -89,17 +89,38 @@ export async function POST(req: NextRequest) {
   await saveAgentStatus('ai_brain', 'running',
     brainResult ? `${brainResult.approved?.length ?? 0} trades approved (score ≥8)` : 'Error', brainResult);
 
-  // 7. Self-learning
+  // 7. Executor — place real MT5 trades
+  await saveAgentStatus('executor', 'running', 'Executing approved trades on MT5...');
+  // Get stored MT5 token
+  const { data: mt5Session } = await sb.from('agent_status').select('data').eq('agent','mt5_session').single();
+  const mt5Token = mt5Session?.data ? JSON.parse(mt5Session.data)?.token : null;
+  const execResult = await callAgent('executor', {
+    approved_trades: brainResult?.approved ?? [],
+    risk: riskResult ?? {},
+    mt5_token: mt5Token,
+  });
+  results.executor = execResult;
+  await saveAgentStatus('executor', 'running',
+    execResult
+      ? execResult.trades_executed > 0
+        ? `✓ ${execResult.trades_executed} trade(s) executed — ${execResult.executed?.map((e:any)=>`${e.direction.toUpperCase()} ${e.symbol}`).join(', ')}`
+        : execResult.blocked
+          ? `Blocked: ${execResult.reason}`
+          : execResult.error ?? 'No trades to execute'
+      : 'Error', execResult);
+
+  // 8. Self-learning
   await saveAgentStatus('self_learning', 'running', 'Updating performance model...');
   const learnResult = await callAgent('self-learning', {});
   results.self_learning = learnResult;
   await saveAgentStatus('self_learning', 'running',
     learnResult ? `Win rate: ${learnResult.overall_win_rate?.toFixed(1) ?? 0}%` : 'Error', learnResult);
 
-  // 8. Alerts
+  // 9. Alerts
   await saveAgentStatus('alerts', 'running', 'Sending Telegram alerts...');
   const alertResult = await callAgent('alerts', {
     approved_trades: brainResult?.approved ?? [],
+    executed_trades: execResult?.executed ?? [],
     biases: msResult?.biases ?? {},
     risk: riskResult ?? {},
   });
@@ -109,15 +130,16 @@ export async function POST(req: NextRequest) {
 
   // Final orchestrator status
   const elapsed = ((Date.now() - started) / 1000).toFixed(1);
+  const executedCount = execResult?.trades_executed ?? 0;
   await saveAgentStatus('orchestrator', 'running',
-    `Cycle complete in ${elapsed}s — ${brainResult?.approved?.length ?? 0} trades approved`);
-  await saveAgentStatus('executor', 'running', 'Ready — awaiting approved signals');
+    `Cycle complete in ${elapsed}s — ${brainResult?.approved?.length ?? 0} approved, ${executedCount} executed on MT5`);
 
   return NextResponse.json({
     ok: true,
     elapsed_s: parseFloat(elapsed),
     symbols_scanned: symbols.length,
     approved_trades: brainResult?.approved?.length ?? 0,
+    executed_trades: execResult?.trades_executed ?? 0,
     results,
   });
 }

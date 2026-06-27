@@ -2,6 +2,26 @@ import { NextResponse } from 'next/server';
 import { sb } from '../../../../lib/supabase';
 export const dynamic = 'force-dynamic';
 
+export async function POST(req: Request) {
+  try {
+    const body = await req.json();
+    const { agent, token, broker } = body;
+    if (agent === 'mt5_session' && token) {
+      await sb.from('agent_status').upsert({
+        agent: 'mt5_session',
+        status: 'connected',
+        last_action: `Connected to ${broker ?? 'MT5'}`,
+        data: JSON.stringify({ token, broker, connected_at: new Date().toISOString() }),
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'agent' });
+      return NextResponse.json({ ok: true });
+    }
+    return NextResponse.json({ error: 'unknown action' }, { status: 400 });
+  } catch (e: any) {
+    return NextResponse.json({ error: e.message }, { status: 500 });
+  }
+}
+
 export async function GET() {
   const { data } = await sb.from('agent_status').select('*');
   const agentMap: Record<string,any> = {};
