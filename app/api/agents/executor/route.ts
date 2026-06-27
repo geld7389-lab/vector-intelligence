@@ -5,10 +5,10 @@ export const maxDuration = 60;
 
 const MT5_BASE = 'https://mt5.mtapi.io';
 
-// Symbol mapping: VECTOR symbol → MT5 broker symbol
+// Symbol mapping: VECTOR symbol → MT5 broker symbol (ExclusiveMarkets-Demo)
 const MT5_SYMBOL_MAP: Record<string, string> = {
-  NQ: 'NQ100',       // NQ futures — try NQ100, NASDAQ, US100
-  ES: 'SP500',       // ES futures
+  NQ: 'US100',       // NQ → US100 on most brokers
+  ES: 'US500',       // ES → US500
   GC: 'XAUUSD',     // Gold
   CL: 'USOIL',      // Crude oil
   BTC: 'BTCUSD',
@@ -16,6 +16,13 @@ const MT5_SYMBOL_MAP: Record<string, string> = {
   EURUSD: 'EURUSD',
   GBPUSD: 'GBPUSD',
   USDJPY: 'USDJPY',
+};
+
+// Yahoo Finance fallback symbols for price if MT5 quote fails
+const YAHOO_MAP: Record<string, string> = {
+  NQ: 'NQ=F', ES: 'ES=F', GC: 'GC=F', CL: 'CL=F',
+  BTC: 'BTC-USD', ETH: 'ETH-USD',
+  EURUSD: 'EURUSD=X', GBPUSD: 'GBPUSD=X', USDJPY: 'USDJPY=X',
 };
 
 // Pip/point sizes per symbol for SL/TP calculation
@@ -55,12 +62,35 @@ async function placeTrade(token: string, symbol: string, direction: string, volu
   try { return JSON.parse(text); } catch { return { raw: text }; }
 }
 
-async function getCurrentPrice(token: string, symbol: string) {
-  const r = await fetch(`${MT5_BASE}/Quote?symbol=${symbol}&id=${token}`, {
-    headers: { accept: 'text/json' },
-    signal: AbortSignal.timeout(10000),
-  });
-  return r.ok ? r.json() : null;
+async function getCurrentPrice(token: string, symbol: string, vectorSymbol: string) {
+  // Try MT5 quote first
+  try {
+    const r = await fetch(`${MT5_BASE}/Quote?symbol=${symbol}&id=${token}`, {
+      headers: { accept: 'text/json' },
+      signal: AbortSignal.timeout(8000),
+    });
+    if (r.ok) {
+      const d = await r.json();
+      const price = d?.Ask ?? d?.ask ?? d?.Bid ?? d?.bid;
+      if (price && price > 0) return { ask: d?.Ask ?? d?.ask, bid: d?.Bid ?? d?.bid, source: 'mt5' };
+    }
+  } catch {}
+
+  // Fallback: Yahoo Finance
+  try {
+    const ySym = YAHOO_MAP[vectorSymbol] ?? `${vectorSymbol}=F`;
+    const r = await fetch(
+      `https://query1.finance.yahoo.com/v8/finance/chart/${ySym}?interval=1m&range=1d`,
+      { headers: { 'User-Agent': 'Mozilla/5.0' }, signal: AbortSignal.timeout(8000) }
+    );
+    if (r.ok) {
+      const j = await r.json();
+      const price = j?.chart?.result?.[0]?.meta?.regularMarketPrice;
+      if (price && price > 0) return { ask: price, bid: price, source: 'yahoo' };
+    }
+  } catch {}
+
+  return null;
 }
 
 export async function POST(req: NextRequest) {
@@ -110,13 +140,13 @@ export async function POST(req: NextRequest) {
 
     try {
       // Get live price
-      const quote = await getCurrentPrice(token, mt5Symbol);
+      const quote = await getCurrentPrice(token, mt5Symbol, trade.symbol);
       const price = trade.direction === 'buy'
-        ? (quote?.Ask ?? quote?.ask ?? 0)
-        : (quote?.Bid ?? quote?.bid ?? 0);
+        ? (quote?.ask ?? 0)
+        : (quote?.bid ?? 0);
 
       if (!price) {
-        failed.push({ symbol: trade.symbol, reason: `Could not get price for ${mt5Symbol}` });
+        failed.push({ symbol: trade.symbol, reason: `Could not get price for ${mt5Symbol} (tried MT5 + Yahoo)` });
         continue;
       }
 
@@ -136,8 +166,16 @@ export async function POST(req: NextRequest) {
       let volume = parseFloat((riskAmount / (slPips * pipValue)).toFixed(2));
       volume = Math.max(0.01, Math.min(volume, 0.1)); // cap between 0.01-0.10 lots for safety
 
-      // Execute trade
-      const result = await placeTrade(token, mt5Symbol, trade.direction, volume, sl, tp);
+      // Execute trade — try multiple symbol name variants
+      const symbolVariants = [mt5Symbol, trade.symbol,
+        trade.symbol === 'NQ' ? 'NASDAQ' : trade.symbol === 'ES' ? 'SPX500' : mt5Symbol
+      ];
+      let result: any = null;
+      for (const sym of symbolVariants) {
+        result = await placeTrade(token, sym, trade.direction, volume, sl, tp);
+        const ticket = result?.Id ?? result?.id ?? result?.ticket ?? result?.Ticket;
+        if (ticket && !String(ticket).toLowerCase().includes('error')) break;
+      }
       const ticket = result?.Id ?? result?.id ?? result?.ticket ?? result?.Ticket ?? result?.raw;
 
       if (ticket && !String(ticket).includes('error') && !String(ticket).includes('Error')) {
