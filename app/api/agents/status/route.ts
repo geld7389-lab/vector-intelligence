@@ -11,7 +11,10 @@ export async function POST(req: Request) {
         agent: 'mt5_session',
         status: 'connected',
         last_action: `Connected to ${broker ?? 'MT5'}`,
-        data: JSON.stringify({ token, broker, connected_at: new Date().toISOString() }),
+        data: JSON.stringify({ 
+          token, broker, login, password, server,
+          connected_at: new Date().toISOString() 
+        }),
         updated_at: new Date().toISOString(),
       }, { onConflict: 'agent' });
       return NextResponse.json({ ok: true });

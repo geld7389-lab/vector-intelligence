@@ -1312,11 +1312,18 @@ function AgentsTab() {
         setMt5BrokerName(d.brokerName ?? mt5Server);
         localStorage.setItem('mt5_token', d.token);
         localStorage.setItem('mt5_broker', d.brokerName ?? mt5Server);
-        // Save token to Supabase so server-side agents can use it
+        // Save token + credentials to Supabase so agents can auto-reconnect
         await fetch('/api/agents/status', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ agent: 'mt5_session', token: d.token, broker: d.brokerName ?? mt5Server }),
+          body: JSON.stringify({ 
+            agent: 'mt5_session', 
+            token: d.token, 
+            broker: d.brokerName ?? mt5Server,
+            login: mt5Login,
+            password: mt5Pass,
+            server: mt5Server,
+          }),
         });
         setMt5Tab('status');
         await loadMt5Accounts(d.token);

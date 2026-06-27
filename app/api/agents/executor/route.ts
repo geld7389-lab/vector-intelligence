@@ -3,9 +3,7 @@ import { sb } from '../../../../lib/supabase';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
-const MT5_BASE = 'https://mt5.mtapi.io';
-
-// Symbol mapping: VECTOR symbol → MT5 broker symbol (ExclusiveMarkets-Demo)
+const MT5_BASE = 'https://mt5.mtapi.io';: VECTOR symbol → MT5 broker symbol (ExclusiveMarkets-Demo)
 const MT5_SYMBOL_MAP: Record<string, string> = {
   NQ: 'US100',       // NQ → US100 on most brokers
   ES: 'US500',       // ES → US500
@@ -96,17 +94,52 @@ async function getCurrentPrice(token: string, symbol: string, vectorSymbol: stri
 export async function POST(req: NextRequest) {
   const { approved_trades = [], risk = {}, mt5_token } = await req.json().catch(() => ({}));
 
-  // Get MT5 token — from request body or Supabase stored token
+  // Get MT5 session — token + credentials for auto-reconnect
   let token = mt5_token;
+  let session: any = null;
   if (!token) {
     const { data } = await sb.from('agent_status').select('data').eq('agent', 'mt5_session').single();
-    token = data?.data ? JSON.parse(data.data)?.token : null;
+    session = data?.data ? JSON.parse(data.data) : null;
+    token = session?.token ?? null;
   }
 
   if (!token) {
     return NextResponse.json({
       ok: false,
-      error: 'No MT5 token available. Connect MT5 in the Agents tab first.',
+      error: 'No MT5 token. Connect MT5 in the Agents tab first.',
+      trades_executed: 0,
+    });
+  }
+
+  // Verify token is still alive — test with AccountSummary
+  const testRes = await fetch(`${MT5_BASE}/AccountSummary?id=${token}`, {
+    headers: { accept: 'text/json' }, signal: AbortSignal.timeout(8000)
+  }).catch(() => null);
+  const testData = testRes ? await testRes.json().catch(() => null) : null;
+  const tokenAlive = testData && (testData.Balance !== undefined || testData.balance !== undefined);
+
+  // Auto-reconnect if token is dead and we have credentials
+  if (!tokenAlive && session?.login && session?.password && session?.server) {
+    try {
+      const reconnectUrl = `${MT5_BASE}/ConnectEx?user=${session.login}&password=${encodeURIComponent(session.password)}&server=${encodeURIComponent(session.server)}&connectTimeoutSeconds=60&connectTimeoutClusterMemberSeconds=20&errorReplyStatusCode=201`;
+      const rr = await fetch(reconnectUrl, { headers: { accept: 'text/plain' }, signal: AbortSignal.timeout(60000) });
+      const newToken = (await rr.text()).replace(/"/g, '').trim();
+      if (newToken && newToken.length > 10) {
+        token = newToken;
+        // Save new token to Supabase
+        await sb.from('agent_status').upsert({
+          agent: 'mt5_session',
+          status: 'connected',
+          last_action: `Auto-reconnected to ${session.server}`,
+          data: JSON.stringify({ ...session, token: newToken, connected_at: new Date().toISOString() }),
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'agent' });
+      }
+    } catch {}
+  } else if (!tokenAlive) {
+    return NextResponse.json({
+      ok: false,
+      error: 'MT5 token expired. Please reconnect in Agents tab.',
       trades_executed: 0,
     });
   }

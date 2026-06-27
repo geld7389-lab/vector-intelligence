@@ -3,6 +3,13 @@ export const dynamic = 'force-dynamic';
 
 const BASE = 'https://mt5.mtapi.io';
 
+async function reconnect(login: string, password: string, server: string) {
+  const url = `${BASE}/ConnectEx?user=${login}&password=${encodeURIComponent(password)}&server=${encodeURIComponent(server)}&connectTimeoutSeconds=60&connectTimeoutClusterMemberSeconds=20&errorReplyStatusCode=201`;
+  const r = await fetch(url, { headers: { accept: 'text/plain' }, signal: AbortSignal.timeout(60000) });
+  const text = await r.text();
+  return text.replace(/"/g, '').trim();
+}
+
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const token = searchParams.get('token') ?? '';
@@ -36,7 +43,7 @@ export async function GET(req: Request) {
     const qr = await fetch(`${BASE}/Quote?symbol=${sym}&id=${token}`, { headers: { accept: 'text/json' }, signal: AbortSignal.timeout(8000) });
     const quote = await qr.json().catch(() => null);
     const price = dir === 'buy' ? (quote?.Ask ?? quote?.ask) : (quote?.Bid ?? quote?.bid);
-    if (!price) return Response.json({ error: 'no price', quote });
+    if (!price) return Response.json({ error: 'no price - token may be expired, reconnect MT5', quote });
     const sl = dir === 'buy' ? +(price - 0.001).toFixed(5) : +(price + 0.001).toFixed(5);
     const tp = dir === 'buy' ? +(price + 0.002).toFixed(5) : +(price - 0.002).toFixed(5);
     const url = `${BASE}/OrderSend?symbol=${sym}&operation=${op}&volume=0.01&sl=${sl}&tp=${tp}&id=${token}`;
