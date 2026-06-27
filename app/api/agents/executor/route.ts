@@ -7,7 +7,7 @@ const MT5_BASE = 'https://mt5.mtapi.io';
 
 // Symbol mapping: VECTOR symbol → MT5 broker symbol (ExclusiveMarkets-Demo)
 const MT5_SYMBOL_MAP: Record<string, string> = {
-  NQ: 'US100',       // NQ → US100 on most brokers
+  NQ: 'US30',        // Try US30 first — ExclusiveMarkets uses US30 for NQ/Dow
   ES: 'US500',       // ES → US500
   GC: 'XAUUSD',     // Gold
   CL: 'USOIL',      // Crude oil
@@ -169,6 +169,7 @@ export async function POST(req: NextRequest) {
   const failed: any[] = [];
 
   for (const trade of approved_trades.slice(0, 2)) { // max 2 trades per cycle
+    if (executed.length > 0) await new Promise(r => setTimeout(r, 1500)); // 1.5s delay between trades
     const mt5Symbol = MT5_SYMBOL_MAP[trade.symbol] ?? trade.symbol;
     const pointSize = POINT_SIZE[mt5Symbol] ?? 0.0001;
     const defaultSl = DEFAULT_SL_POINTS[mt5Symbol] ?? 30;
@@ -202,14 +203,34 @@ export async function POST(req: NextRequest) {
       volume = Math.max(0.01, Math.min(volume, 0.1)); // cap between 0.01-0.10 lots for safety
 
       // Execute trade — try multiple symbol name variants
-      const symbolVariants = [mt5Symbol, trade.symbol,
-        trade.symbol === 'NQ' ? 'NASDAQ' : trade.symbol === 'ES' ? 'SPX500' : mt5Symbol
-      ];
+      const symbolVariants: Record<string, string[]> = {
+        NQ: ['US100', 'NAS100', 'USTEC', 'US30', 'NDX'],
+        ES: ['US500', 'SPX500', 'SP500', 'USA500'],
+        GC: ['XAUUSD', 'GOLD'],
+        CL: ['USOIL', 'WTI', 'OIL'],
+        BTC: ['BTCUSD', 'BTC/USD'],
+        ETH: ['ETHUSD', 'ETH/USD'],
+      };
+      const variants = symbolVariants[trade.symbol] ?? [mt5Symbol];
+      
       let result: any = null;
-      for (const sym of symbolVariants) {
-        result = await placeTrade(token, sym, trade.direction, volume, sl, tp);
-        const ticket = result?.Id ?? result?.id ?? result?.ticket ?? result?.Ticket;
-        if (ticket && !String(ticket).toLowerCase().includes('error')) break;
+      let usedSymbol = variants[0];
+      for (const sym of variants) {
+        // First check if quote works for this symbol
+        const qTest = await fetch(`${MT5_BASE}/Quote?symbol=${sym}&id=${token}`, {
+          headers: { accept: 'text/json' }, signal: AbortSignal.timeout(5000)
+        }).catch(() => null);
+        if (!qTest?.ok) continue;
+        const qData = await qTest.json().catch(() => null);
+        if (!qData?.Ask && !qData?.Bid) continue;
+        
+        // This symbol works — use it for the trade
+        usedSymbol = sym;
+        const usePrice = trade.direction === 'buy' ? (qData.Ask ?? price) : (qData.Bid ?? price);
+        const useSl = trade.direction === 'buy' ? +(usePrice - (DEFAULT_SL_POINTS[sym] ?? defaultSl) * pointSize).toFixed(5) : +(usePrice + (DEFAULT_SL_POINTS[sym] ?? defaultSl) * pointSize).toFixed(5);
+        const useTp = trade.direction === 'buy' ? +(usePrice + (DEFAULT_SL_POINTS[sym] ?? defaultSl) * pointSize * 2).toFixed(5) : +(usePrice - (DEFAULT_SL_POINTS[sym] ?? defaultSl) * pointSize * 2).toFixed(5);
+        result = await placeTrade(token, sym, trade.direction, volume, useSl, useTp);
+        break;
       }
       const ticket = result?.Id ?? result?.id ?? result?.ticket ?? result?.Ticket ?? result?.raw;
 
