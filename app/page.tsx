@@ -1255,11 +1255,27 @@ function AgentsTab() {
   const [mt5Error, setMt5Error] = React.useState<string|null>(null);
   const [mt5BrokerName, setMt5BrokerName] = React.useState('');
 
-  // Load saved token from localStorage on mount
+  // Load saved token — try Supabase first (survives deploys), then localStorage
   React.useEffect(() => {
-    const saved = typeof window !== 'undefined' ? localStorage.getItem('mt5_token') : null;
-    const broker = typeof window !== 'undefined' ? localStorage.getItem('mt5_broker') : null;
-    if (saved) { setMt5Token(saved); if (broker) setMt5BrokerName(broker); }
+    const loadToken = async () => {
+      // Try localStorage first (fast)
+      const saved = localStorage.getItem('mt5_token');
+      const broker = localStorage.getItem('mt5_broker');
+      if (saved) { setMt5Token(saved); if (broker) setMt5BrokerName(broker); return; }
+      // Fallback: load from Supabase (survives deploys/browser clears)
+      try {
+        const r = await fetch('/api/agents/status');
+        const d = await r.json();
+        const mt5 = d.agents?.mt5_session;
+        if (mt5?.data?.token) {
+          setMt5Token(mt5.data.token);
+          setMt5BrokerName(mt5.data.broker ?? '');
+          localStorage.setItem('mt5_token', mt5.data.token);
+          localStorage.setItem('mt5_broker', mt5.data.broker ?? '');
+        }
+      } catch {}
+    };
+    loadToken();
   }, []);
 
   const loadMt5Accounts = React.useCallback(async (token?: string) => {

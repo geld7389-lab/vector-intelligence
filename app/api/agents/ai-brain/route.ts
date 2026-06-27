@@ -35,7 +35,7 @@ Respond ONLY with this exact JSON (no markdown, no explanation):
   "target": "<description>"
 }
 
-Only approve (trade_approved: true) if score >= 8 AND confidence = high AND no news blackout AND HTF bias aligns with direction.`;
+Approve (trade_approved: true) if score >= 7 AND confidence is medium or high AND no news blackout AND HTF bias aligns with direction. Be realistic — good setups with strong confluence should be approved.`;
 
   try {
     const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
@@ -74,7 +74,7 @@ Only approve (trade_approved: true) if score >= 8 AND confidence = high AND no n
       primary_reason: `Rule-based: ${setup.ema_stack} EMA stack, ${setup.bias_h4} H4 bias`,
       invalidation: `Bias shifts to ${setup.direction==='buy'?'bearish':'bullish'}`,
       risk_adjustment: score>=7?'normal':'reduce_half',
-      trade_approved: score>=8 && !setup.blackout_active,
+      trade_approved: score>=7 && !setup.blackout_active,
       entry_zone: 'Near FVG/OB zone',
       target: 'Next liquidity pool',
     };
@@ -117,7 +117,7 @@ export async function POST(req: NextRequest) {
   const toScore = candidates.slice(0, 6);
   const scored = await Promise.all(toScore.map(scoreSetup));
 
-  const approved = scored.filter((s:any) => s.trade_approved === true);
+  const approved = scored.filter((s:any) => s.trade_approved === true || s.setup_score >= 7);
 
   // Save to Supabase knowledge base as trade signals
   // (done via orchestrator)
