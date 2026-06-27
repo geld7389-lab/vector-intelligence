@@ -3,7 +3,9 @@ import { sb } from '../../../../lib/supabase';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
-const MT5_BASE = 'https://mt5.mtapi.io';: VECTOR symbol → MT5 broker symbol (ExclusiveMarkets-Demo)
+const MT5_BASE = 'https://mt5.mtapi.io';
+
+// Symbol mapping: VECTOR symbol → MT5 broker symbol (ExclusiveMarkets-Demo)
 const MT5_SYMBOL_MAP: Record<string, string> = {
   NQ: 'US100',       // NQ → US100 on most brokers
   ES: 'US500',       // ES → US500
