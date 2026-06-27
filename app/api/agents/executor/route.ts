@@ -183,14 +183,8 @@ export async function POST(req: NextRequest) {
 
       // Position size: risk$ / SL in $ = lots
       // Simplified: for forex 1 lot = $10/pip, for indices = $1/point
-      const pipValue = ['EURUSD.','GBPUSD.','EURUSD','GBPUSD'].includes(usedSymbol) ? 10 :
-                       ['USDJPY.','USDJPY'].includes(usedSymbol) ? 7 :
-                       ['XAUUSD.','XAUUSD'].includes(usedSymbol) ? 10 :
-                       ['US100.','US100'].includes(usedSymbol) ? 1 :
-                       ['US500.','US500'].includes(usedSymbol) ? 1 : 1;
-      const slPips = defaultSl;
-      let volume = parseFloat((riskAmount / (slPips * pipValue)).toFixed(2));
-      volume = Math.max(0.01, Math.min(volume, 0.1)); // cap between 0.01-0.10 lots for safety
+      let volume = parseFloat((riskAmount / (defaultSl * 1)).toFixed(2));
+      volume = Math.max(0.01, Math.min(volume, 0.10));
 
       // Execute trade — try multiple symbol name variants
       const symbolVariants: Record<string, string[]> = {
@@ -205,36 +199,39 @@ export async function POST(req: NextRequest) {
         USDJPY: ['USDJPY.', 'USDJPY'],
       };
       const variants = symbolVariants[trade.symbol] ?? [mt5Symbol];
-      
+
       let result: any = null;
       let usedSymbol = variants[0];
+      let usePrice = price;
+      let useSl = sl;
+      let useTp = tp;
+
       for (const sym of variants) {
-        // First check if quote works for this symbol
         const qTest = await fetch(`${MT5_BASE}/Quote?symbol=${sym}&id=${token}`, {
           headers: { accept: 'text/json' }, signal: AbortSignal.timeout(5000)
         }).catch(() => null);
         if (!qTest?.ok) continue;
         const qData = await qTest.json().catch(() => null);
         if (!qData?.Ask && !qData?.Bid) continue;
-        
-        // This symbol works — use it for the trade
+
         usedSymbol = sym;
-        const usePrice = trade.direction === 'buy' ? (qData.Ask ?? price) : (qData.Bid ?? price);
-        const useSl = trade.direction === 'buy' ? +(usePrice - (DEFAULT_SL_POINTS[sym] ?? defaultSl) * pointSize).toFixed(5) : +(usePrice + (DEFAULT_SL_POINTS[sym] ?? defaultSl) * pointSize).toFixed(5);
-        const useTp = trade.direction === 'buy' ? +(usePrice + (DEFAULT_SL_POINTS[sym] ?? defaultSl) * pointSize * 2).toFixed(5) : +(usePrice - (DEFAULT_SL_POINTS[sym] ?? defaultSl) * pointSize * 2).toFixed(5);
+        usePrice = trade.direction === 'buy' ? (qData.Ask ?? price) : (qData.Bid ?? price);
+        const slPts = DEFAULT_SL_POINTS[sym.replace('.', '')] ?? defaultSl;
+        const ptSize = POINT_SIZE[sym.replace('.', '')] ?? pointSize;
+        useSl = trade.direction === 'buy' ? +(usePrice - slPts * ptSize).toFixed(5) : +(usePrice + slPts * ptSize).toFixed(5);
+        useTp = trade.direction === 'buy' ? +(usePrice + slPts * ptSize * 2).toFixed(5) : +(usePrice - slPts * ptSize * 2).toFixed(5);
         result = await placeTrade(token, sym, trade.direction, volume, useSl, useTp);
         break;
       }
       const ticket = result?.Id ?? result?.id ?? result?.ticket ?? result?.Ticket ?? result?.raw;
 
-      if (ticket && !String(ticket).includes('error') && !String(ticket).includes('Error')) {
-        // Save to Supabase trades table
+      if (ticket && !String(ticket).includes('error') && !String(ticket).includes('Error') && !String(ticket).includes('message')) {
         await sb.from('trades').insert({
           symbol: trade.symbol,
           direction: trade.direction,
-          entry: price,
-          sl: parseFloat(sl.toFixed(5)),
-          tp: parseFloat(tp.toFixed(5)),
+          entry: usePrice,
+          sl: useSl,
+          tp: useTp,
           volume,
           risk_pct: riskPct * 100,
           status: 'open',
@@ -246,12 +243,12 @@ export async function POST(req: NextRequest) {
 
         executed.push({
           symbol: trade.symbol,
-          mt5Symbol,
+          mt5Symbol: usedSymbol,
           direction: trade.direction,
           volume,
-          entry: price,
-          sl: parseFloat(sl.toFixed(5)),
-          tp: parseFloat(tp.toFixed(5)),
+          entry: usePrice,
+          sl: useSl,
+          tp: useTp,
           ticket: String(ticket),
           score: trade.setup_score,
         });
