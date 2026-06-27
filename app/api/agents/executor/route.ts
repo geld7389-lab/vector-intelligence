@@ -7,15 +7,15 @@ const MT5_BASE = 'https://mt5.mtapi.io';
 
 // Symbol mapping: VECTOR symbol → MT5 broker symbol (ExclusiveMarkets-Demo)
 const MT5_SYMBOL_MAP: Record<string, string> = {
-  NQ: 'US30',        // Try US30 first — ExclusiveMarkets uses US30 for NQ/Dow
-  ES: 'US500',       // ES → US500
-  GC: 'XAUUSD',     // Gold
-  CL: 'USOIL',      // Crude oil
-  BTC: 'BTCUSD',
-  ETH: 'ETHUSD',
-  EURUSD: 'EURUSD',
-  GBPUSD: 'GBPUSD',
-  USDJPY: 'USDJPY',
+  NQ: 'US100.',
+  ES: 'US500.',
+  GC: 'XAUUSD.',
+  CL: 'USOIL.',
+  BTC: 'BTCUSD.',
+  ETH: 'ETHUSD.',
+  EURUSD: 'EURUSD.',
+  GBPUSD: 'GBPUSD.',
+  USDJPY: 'USDJPY.',
 };
 
 // Yahoo Finance fallback symbols for price if MT5 quote fails
@@ -183,22 +183,26 @@ export async function POST(req: NextRequest) {
 
       // Position size: risk$ / SL in $ = lots
       // Simplified: for forex 1 lot = $10/pip, for indices = $1/point
-      const pipValue = ['EURUSD','GBPUSD'].includes(mt5Symbol) ? 10 :
-                       mt5Symbol === 'USDJPY' ? 7 :
-                       mt5Symbol === 'XAUUSD' ? 10 :
-                       mt5Symbol === 'NQ100' ? 20 : 1;
+      const pipValue = ['EURUSD.','GBPUSD.','EURUSD','GBPUSD'].includes(usedSymbol) ? 10 :
+                       ['USDJPY.','USDJPY'].includes(usedSymbol) ? 7 :
+                       ['XAUUSD.','XAUUSD'].includes(usedSymbol) ? 10 :
+                       ['US100.','US100'].includes(usedSymbol) ? 1 :
+                       ['US500.','US500'].includes(usedSymbol) ? 1 : 1;
       const slPips = defaultSl;
       let volume = parseFloat((riskAmount / (slPips * pipValue)).toFixed(2));
       volume = Math.max(0.01, Math.min(volume, 0.1)); // cap between 0.01-0.10 lots for safety
 
       // Execute trade — try multiple symbol name variants
       const symbolVariants: Record<string, string[]> = {
-        NQ: ['US100', 'NAS100', 'USTEC', 'US30', 'NDX'],
-        ES: ['US500', 'SPX500', 'SP500', 'USA500'],
-        GC: ['XAUUSD', 'GOLD'],
-        CL: ['USOIL', 'WTI', 'OIL'],
-        BTC: ['BTCUSD', 'BTC/USD'],
-        ETH: ['ETHUSD', 'ETH/USD'],
+        NQ: ['US100.', 'US100'],
+        ES: ['US500.', 'US500'],
+        GC: ['XAUUSD.', 'XAUUSD'],
+        CL: ['USOIL.', 'USOIL'],
+        BTC: ['BTCUSD.', 'BTCUSD'],
+        ETH: ['ETHUSD.', 'ETHUSD'],
+        EURUSD: ['EURUSD.', 'EURUSD'],
+        GBPUSD: ['GBPUSD.', 'GBPUSD'],
+        USDJPY: ['USDJPY.', 'USDJPY'],
       };
       const variants = symbolVariants[trade.symbol] ?? [mt5Symbol];
       

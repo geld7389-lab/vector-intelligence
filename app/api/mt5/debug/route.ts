@@ -17,9 +17,7 @@ export async function GET(req: Request) {
   if (!token) return Response.json({ error: 'token required' });
 
   if (action === 'symbols') {
-    const symbols = ['EURUSD','GBPUSD','USDJPY','XAUUSD','USOIL',
-      'US100','US500','US30','NAS100','SP500','NQ100','BTCUSD','ETHUSD',
-      'NASDAQ','WTI','GOLD','USTEC','NDX','USA500','SPX500'];
+    const symbols = ['EURUSD.','GBPUSD.','USDJPY.','XAUUSD.','USOIL.','US100.','US500.','BTCUSD.','ETHUSD.','EURUSD','GBPUSD','US100','US500','BTCUSD'];
     const results: Record<string,any> = {};
     await Promise.all(symbols.map(async (sym) => {
       try {
