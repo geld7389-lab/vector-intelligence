@@ -5,7 +5,7 @@ export const dynamic = 'force-dynamic';
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { agent, token, broker } = body;
+    const { agent, token, broker, login, password, server } = body;
     if (agent === 'mt5_session' && token) {
       await sb.from('agent_status').upsert({
         agent: 'mt5_session',
