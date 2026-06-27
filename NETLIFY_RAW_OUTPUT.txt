@@ -36,30 +36,20 @@ $ npm run build
   - Environments: .env.local
 
    Creating an optimized production build ...
+ ✓ Compiled successfully
+   Linting and checking validity of types ...
 Failed to compile.
 
-./app/api/agents/executor/route.ts
-Error: 
-  [31mx[0m Expression expected
-   ,-[[36;1;4m/home/runner/work/vector-intelligence/vector-intelligence/app/api/agents/executor/route.ts[0m:3:1]
- [2m3[0m | export const dynamic = 'force-dynamic';
- [2m4[0m | export const maxDuration = 60;
- [2m5[0m | 
- [2m6[0m | const MT5_BASE = 'https://mt5.mtapi.io';: VECTOR symbol → MT5 broker symbol (ExclusiveMarkets-Demo)
-   : [31;1m                                        ^[0m
- [2m7[0m | const MT5_SYMBOL_MAP: Record<string, string> = {
- [2m8[0m |   NQ: 'US100',       // NQ → US100 on most brokers
- [2m9[0m |   ES: 'US500',       // ES → US500
-   `----
+./app/api/agents/status/route.ts:15:26
+Type error: No value exists in scope for the shorthand property 'login'. Either declare one or provide an initializer.
 
-Caused by:
-    Syntax Error
-
-Import trace for requested module:
-./app/api/agents/executor/route.ts
-
-
-> Build failed because of webpack errors
+[0m [90m 13 |[39m         last_action[33m:[39m [32m`Connected to ${broker ?? 'MT5'}`[39m[33m,[39m[0m
+[0m [90m 14 |[39m         data[33m:[39m [33mJSON[39m[33m.[39mstringify({ [0m
+[0m[31m[1m>[22m[39m[90m 15 |[39m           token[33m,[39m broker[33m,[39m login[33m,[39m password[33m,[39m server[33m,[39m[0m
+[0m [90m    |[39m                          [31m[1m^[22m[39m[0m
+[0m [90m 16 |[39m           connected_at[33m:[39m [36mnew[39m [33mDate[39m()[33m.[39mtoISOString() [0m
+[0m [90m 17 |[39m         })[33m,[39m[0m
+[0m [90m 18 |[39m         updated_at[33m:[39m [36mnew[39m [33mDate[39m()[33m.[39mtoISOString()[33m,[39m[0m
 ​
 "build.command" failed                                        
 ────────────────────────────────────────────────────────────────
