@@ -1242,38 +1242,43 @@ function AgentsTab() {
   const [runResult, setRunResult] = React.useState<any>(null);
   const [lastRun, setLastRun] = React.useState<string>('Never');
 
-  // MT5 Cloud Connection state
+  // MT5 Connection state — uses mtapi.io (no API key needed)
   const [mt5Tab, setMt5Tab] = React.useState<'status'|'connect'>('status');
   const [mt5Login, setMt5Login] = React.useState('');
   const [mt5Pass, setMt5Pass] = React.useState('');
   const [mt5Server, setMt5Server] = React.useState('');
-  const [mt5AccountName, setMt5AccountName] = React.useState('');
   const [mt5Connecting, setMt5Connecting] = React.useState(false);
   const [mt5Result, setMt5Result] = React.useState<any>(null);
-  const [mt5Accounts, setMt5Accounts] = React.useState<any[]>([]);
+  const [mt5Token, setMt5Token] = React.useState<string|null>(null);
   const [mt5AccountInfo, setMt5AccountInfo] = React.useState<any>(null);
   const [mt5Loading, setMt5Loading] = React.useState(false);
   const [mt5Error, setMt5Error] = React.useState<string|null>(null);
+  const [mt5BrokerName, setMt5BrokerName] = React.useState('');
 
-  const loadMt5Accounts = React.useCallback(async () => {
+  // Load saved token from localStorage on mount
+  React.useEffect(() => {
+    const saved = typeof window !== 'undefined' ? localStorage.getItem('mt5_token') : null;
+    const broker = typeof window !== 'undefined' ? localStorage.getItem('mt5_broker') : null;
+    if (saved) { setMt5Token(saved); if (broker) setMt5BrokerName(broker); }
+  }, []);
+
+  const loadMt5Accounts = React.useCallback(async (token?: string) => {
+    const t = token ?? mt5Token;
+    if (!t) return;
     setMt5Loading(true); setMt5Error(null);
     try {
-      const r = await fetch('/api/mt5/connect');
+      const r = await fetch(`/api/mt5/account?token=${t}`);
       const d = await r.json();
-      if (d.error) { setMt5Error(d.error); setMt5Accounts([]); setMt5Loading(false); return; }
-      setMt5Accounts(d.accounts ?? []);
-      // Auto-load account info for first connected account
-      const connected = (d.accounts ?? []).find((a: any) =>
-        a.connectionStatus === 'CONNECTED' || a.state === 'DEPLOYED'
-      );
-      if (connected) {
-        const r2 = await fetch(`/api/mt5/account?accountId=${connected.id}`);
-        const d2 = await r2.json();
-        setMt5AccountInfo({ ...d2, accountId: connected.id, accountName: connected.name });
+      if (d.account?.error || !d.connected) {
+        setMt5Error('Session expired. Please reconnect.');
+        setMt5Token(null);
+        localStorage.removeItem('mt5_token');
+      } else {
+        setMt5AccountInfo(d);
       }
     } catch(e: any) { setMt5Error(e.message); }
     setMt5Loading(false);
-  }, []);
+  }, [mt5Token]);
 
   const connectMt5 = async () => {
     if (!mt5Login || !mt5Pass || !mt5Server) return;
@@ -1282,23 +1287,26 @@ function AgentsTab() {
       const r = await fetch('/api/mt5/connect', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ login: mt5Login, password: mt5Pass, server: mt5Server, accountName: mt5AccountName || `VECTOR-${mt5Login}` }),
+        body: JSON.stringify({ login: mt5Login, password: mt5Pass, server: mt5Server }),
       });
       const d = await r.json();
       setMt5Result(d);
-      if (d.success) {
+      if (d.success && d.token) {
+        setMt5Token(d.token);
+        setMt5BrokerName(d.brokerName ?? mt5Server);
+        localStorage.setItem('mt5_token', d.token);
+        localStorage.setItem('mt5_broker', d.brokerName ?? mt5Server);
         setMt5Tab('status');
-        // Poll accounts every 8s for 3 minutes while MetaApi connects to broker
-        let attempts = 0;
-        const iv = setInterval(async () => {
-          attempts++;
-          await loadMt5Accounts();
-          if (attempts >= 22) clearInterval(iv); // ~3 minutes
-        }, 8000);
-        loadMt5Accounts();
+        await loadMt5Accounts(d.token);
       }
     } catch (e: any) { setMt5Result({ error: e.message }); }
     setMt5Connecting(false);
+  };
+
+  const disconnectMt5 = () => {
+    setMt5Token(null); setMt5AccountInfo(null); setMt5BrokerName('');
+    localStorage.removeItem('mt5_token'); localStorage.removeItem('mt5_broker');
+    setMt5Tab('connect');
   };
 
   const AGENT_DEFS = [
@@ -1327,7 +1335,7 @@ function AgentsTab() {
       .catch(()=>setLoading(false));
   }, []);
 
-  React.useEffect(() => { loadStatus(); loadMt5Accounts(); }, [loadStatus, loadMt5Accounts]);
+  React.useEffect(() => { loadStatus(); }, [loadStatus]);
   React.useEffect(() => {
     const iv = setInterval(loadStatus, 8000);
     return () => clearInterval(iv);
@@ -1564,15 +1572,15 @@ function AgentsTab() {
       <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4">
         <div className="flex items-center justify-between mb-4">
           <div>
-            <div className="text-sm font-semibold text-zinc-200">MetaTrader 5 — Cloud Connection</div>
-            <div className="text-xs text-zinc-600 mt-0.5">Connect your MT5 account via MetaApi cloud — no local software needed</div>
+            <div className="text-sm font-semibold text-zinc-200">MetaTrader 5 — Live Connection</div>
+            <div className="text-xs text-zinc-600 mt-0.5">Direct broker connection — no API key or registration required</div>
           </div>
           <div className="flex gap-2">
             {(['status','connect'] as const).map(t=>(
               <button key={t} onClick={()=>setMt5Tab(t)}
                 className={cx('px-3 py-1 rounded-lg text-[11px] font-semibold transition-colors',
                   mt5Tab===t?'bg-zinc-700 text-zinc-100':'bg-zinc-800 text-zinc-500 hover:text-zinc-300')}>
-                {t==='status'?'Accounts':'Connect New'}
+                {t==='status'?'Account':'Connect'}
               </button>
             ))}
           </div>
@@ -1580,92 +1588,74 @@ function AgentsTab() {
 
         {mt5Tab === 'status' && (
           <div>
-            {mt5Loading && <div className="text-center py-4 text-xs text-zinc-600">↻ Loading accounts...</div>}
+            {mt5Loading && <div className="text-center py-4 text-xs text-zinc-600">↻ Loading...</div>}
             {mt5Error && (
-              <div className="rounded-lg border border-red-800 bg-red-900/10 p-3 text-xs text-red-400 mb-3">
-                {mt5Error}
-              </div>
+              <div className="rounded-lg border border-red-800 bg-red-900/10 p-3 text-xs text-red-400 mb-3">{mt5Error}</div>
             )}
-            {!mt5Loading && mt5Accounts.length === 0 && (
+            {!mt5Token && !mt5Loading && (
               <div className="text-center py-8">
-                <div className="text-xs text-zinc-600 mb-2">No MT5 accounts connected</div>
-                <div className="text-[10px] text-zinc-700 mb-4">Connect your MT5 demo or live account to enable cloud trading</div>
-                <div className="text-[10px] text-zinc-700 space-y-1">
-                  <div>1. Get a free MetaApi token at <span className="text-emerald-500">app.metaapi.cloud/token</span></div>
-                  <div>2. Add <span className="text-zinc-400 font-mono">METAAPI_TOKEN</span> to your Vercel environment variables</div>
-                  <div>3. Click "Connect New" and enter your MT5 credentials</div>
-                </div>
-                <button onClick={()=>setMt5Tab('connect')} className="mt-4 px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-black text-xs font-bold transition-colors">
+                <div className="text-xs text-zinc-600 mb-2">No MT5 account connected</div>
+                <div className="text-[10px] text-zinc-700 mb-4">Enter your MT5 login, password, and broker server name to connect</div>
+                <button onClick={()=>setMt5Tab('connect')} className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-black text-xs font-bold transition-colors">
                   + Connect MT5 Account
                 </button>
               </div>
             )}
-            {mt5Accounts.length > 0 && (
+            {mt5Token && mt5AccountInfo && (
               <div className="space-y-3">
-                {mt5Accounts.map((acc: any) => (
-                  <div key={acc.id} className="rounded-lg border border-zinc-800 bg-zinc-950 p-3">
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="flex items-center gap-3">
-                        <div className={cx('w-2 h-2 rounded-full', acc.connectionStatus==='CONNECTED'?'bg-emerald-500 animate-pulse':'bg-zinc-600')}/>
-                        <span className="text-xs font-semibold text-zinc-200">{acc.name}</span>
-                        <span className="text-[10px] text-zinc-600 font-mono">{acc.login} @ {acc.server}</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <span className={cx('text-[10px] px-2 py-0.5 rounded font-bold',
-                          acc.state==='DEPLOYED'?'bg-emerald-900/60 text-emerald-400':
-                          acc.state==='DEPLOYING'?'bg-amber-900/60 text-amber-400':
-                          acc.state==='ERROR'?'bg-red-900/60 text-red-400':
-                          'bg-zinc-800 text-zinc-500')}>
-                          {acc.state === 'DEPLOYING' ? '⟳ CONNECTING...' :
-                           acc.state === 'DEPLOYED' ? '● CONNECTED' :
-                           acc.state === 'ERROR' ? '✗ ERROR' :
-                           acc.state ?? 'UNKNOWN'}
-                        </span>
-                        <span className="text-[10px] text-zinc-600">{acc.platform?.toUpperCase()}</span>
-                      </div>
+                <div className="rounded-lg border border-emerald-800/50 bg-zinc-950 p-3">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"/>
+                      <span className="text-xs font-semibold text-zinc-200">{mt5BrokerName}</span>
                     </div>
-                    {mt5AccountInfo?.accountId === acc.id && mt5AccountInfo?.info && (
-                      <div className="grid grid-cols-4 gap-2 mt-2 pt-2 border-t border-zinc-800">
-                        {[
-                          { l:'Balance', v:`$${mt5AccountInfo.info.balance?.toLocaleString('en',{minimumFractionDigits:2,maximumFractionDigits:2})}` },
-                          { l:'Equity', v:`$${mt5AccountInfo.info.equity?.toLocaleString('en',{minimumFractionDigits:2,maximumFractionDigits:2})}` },
-                          { l:'Margin', v:`$${mt5AccountInfo.info.margin?.toFixed(2)}` },
-                          { l:'Free Margin', v:`$${mt5AccountInfo.info.freeMargin?.toFixed(2)}` },
-                        ].map(s=>(
-                          <div key={s.l} className="rounded bg-zinc-900 px-2 py-1">
-                            <div className="text-[10px] text-zinc-600">{s.l}</div>
-                            <div className="text-xs font-bold text-zinc-200 font-mono">{s.v ?? '—'}</div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] px-2 py-0.5 rounded font-bold bg-emerald-900/60 text-emerald-400">● CONNECTED</span>
+                      <button onClick={disconnectMt5} className="text-[10px] text-zinc-600 hover:text-red-400 transition-colors">Disconnect</button>
+                    </div>
+                  </div>
+                  {mt5AccountInfo.account && (
+                    <div className="grid grid-cols-4 gap-2">
+                      {[
+                        { l:'Balance', v:`$${(mt5AccountInfo.account.Balance ?? mt5AccountInfo.account.balance ?? 0).toLocaleString('en',{minimumFractionDigits:2,maximumFractionDigits:2})}` },
+                        { l:'Equity', v:`$${(mt5AccountInfo.account.Equity ?? mt5AccountInfo.account.equity ?? 0).toLocaleString('en',{minimumFractionDigits:2,maximumFractionDigits:2})}` },
+                        { l:'Margin', v:`$${(mt5AccountInfo.account.Margin ?? mt5AccountInfo.account.margin ?? 0).toFixed(2)}` },
+                        { l:'Free Margin', v:`$${(mt5AccountInfo.account.FreeMargin ?? mt5AccountInfo.account.freeMargin ?? 0).toFixed(2)}` },
+                      ].map(s=>(
+                        <div key={s.l} className="rounded bg-zinc-900 px-2 py-1">
+                          <div className="text-[10px] text-zinc-600">{s.l}</div>
+                          <div className="text-xs font-bold text-zinc-200 font-mono">{s.v}</div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {mt5AccountInfo.positions?.length > 0 && (
+                    <div className="mt-3">
+                      <div className="text-[10px] text-zinc-600 mb-2">Open Positions ({mt5AccountInfo.positions.length})</div>
+                      <div className="space-y-1">
+                        {mt5AccountInfo.positions.slice(0,5).map((p: any, i: number) => (
+                          <div key={i} className="flex items-center justify-between text-[11px] py-1 border-b border-zinc-900">
+                            <div className="flex items-center gap-2">
+                              <span className={cx('px-1.5 py-0.5 rounded text-[10px] font-bold',
+                                (p.Type===0||p.type===0||p.action==='buy')?'bg-emerald-900/60 text-emerald-400':'bg-red-900/60 text-red-400')}>
+                                {(p.Type===0||p.type===0||p.action==='buy')?'BUY':'SELL'}
+                              </span>
+                              <span className="font-mono text-zinc-200">{p.Symbol ?? p.symbol}</span>
+                              <span className="text-zinc-600">{p.Volume ?? p.volume} lots</span>
+                            </div>
+                            <div className="flex items-center gap-3">
+                              <span className="text-zinc-500">@ {(p.PriceOpen ?? p.openPrice)?.toFixed(5)}</span>
+                              <span className={cx('font-bold', (p.Profit ?? p.profit ?? 0)>=0?'text-emerald-400':'text-red-400')}>
+                                {(p.Profit ?? p.profit ?? 0)>=0?'+':''}{(p.Profit ?? p.profit ?? 0).toFixed(2)}
+                              </span>
+                            </div>
                           </div>
                         ))}
                       </div>
-                    )}
-                    {mt5AccountInfo?.positions?.length > 0 && mt5AccountInfo.accountId === acc.id && (
-                      <div className="mt-3">
-                        <div className="text-[10px] text-zinc-600 mb-2">Open Positions ({mt5AccountInfo.positions.length})</div>
-                        <div className="space-y-1">
-                          {mt5AccountInfo.positions.slice(0,5).map((p: any) => (
-                            <div key={p.id} className="flex items-center justify-between text-[11px] py-1 border-b border-zinc-900">
-                              <div className="flex items-center gap-2">
-                                <span className={cx('px-1.5 py-0.5 rounded text-[10px] font-bold', p.type==='POSITION_TYPE_BUY'?'bg-emerald-900/60 text-emerald-400':'bg-red-900/60 text-red-400')}>
-                                  {p.type==='POSITION_TYPE_BUY'?'BUY':'SELL'}
-                                </span>
-                                <span className="font-mono text-zinc-200">{p.symbol}</span>
-                                <span className="text-zinc-600">{p.volume} lots</span>
-                              </div>
-                              <div className="flex items-center gap-3">
-                                <span className="text-zinc-500">@ {p.openPrice?.toFixed(5)}</span>
-                                <span className={cx('font-bold', (p.profit??0)>=0?'text-emerald-400':'text-red-400')}>
-                                  {(p.profit??0)>=0?'+':''}{p.profit?.toFixed(2)}
-                                </span>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                ))}
-                <button onClick={loadMt5Accounts} className="text-[10px] text-zinc-600 hover:text-zinc-400 transition-colors mt-1">
+                    </div>
+                  )}
+                </div>
+                <button onClick={()=>loadMt5Accounts()} className="text-[10px] text-zinc-600 hover:text-zinc-400 transition-colors">
                   ↻ Refresh
                 </button>
               </div>
@@ -1676,16 +1666,15 @@ function AgentsTab() {
         {mt5Tab === 'connect' && (
           <div className="space-y-3">
             <div className="rounded-lg border border-zinc-800 bg-zinc-950 p-3 text-[11px] text-zinc-500 space-y-1">
-              <div className="text-zinc-400 font-semibold mb-2">How it works</div>
-              <div>• MetaApi runs your MT5 terminal in the cloud — 100% online, no VPS needed</div>
-              <div>• Supports any broker (ICMarkets, Pepperstone, FXCM, etc.)</div>
-              <div>• Demo and live accounts both supported</div>
-              <div>• Free tier: 1 MT5 account — <span className="text-emerald-500">app.metaapi.cloud</span></div>
+              <div className="text-zinc-400 font-semibold mb-1">Direct connection — no third-party service needed</div>
+              <div>• Connects directly to your broker using your MT5 login credentials</div>
+              <div>• Session token saved in browser — reconnects automatically</div>
+              <div>• Broker server name: open MT5 → File → Login → copy exact server name</div>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="text-[10px] text-zinc-600 mb-1 block">MT5 Login (Account Number)</label>
-                <input value={mt5Login} onChange={e=>setMt5Login(e.target.value)} placeholder="123456"
+                <input value={mt5Login} onChange={e=>setMt5Login(e.target.value)} placeholder="8029341"
                   className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-xs text-zinc-200 focus:outline-none focus:border-zinc-600"/>
               </div>
               <div>
@@ -1693,27 +1682,19 @@ function AgentsTab() {
                 <input type="password" value={mt5Pass} onChange={e=>setMt5Pass(e.target.value)} placeholder="••••••••"
                   className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-xs text-zinc-200 focus:outline-none focus:border-zinc-600"/>
               </div>
-              <div>
-                <label className="text-[10px] text-zinc-600 mb-1 block">Broker Server</label>
-                <input value={mt5Server} onChange={e=>setMt5Server(e.target.value)} placeholder="ICMarketsSC-Demo"
-                  className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-xs text-zinc-200 focus:outline-none focus:border-zinc-600"/>
-              </div>
-              <div>
-                <label className="text-[10px] text-zinc-600 mb-1 block">Account Name (optional)</label>
-                <input value={mt5AccountName} onChange={e=>setMt5AccountName(e.target.value)} placeholder="My Demo Account"
+              <div className="sm:col-span-2">
+                <label className="text-[10px] text-zinc-600 mb-1 block">Broker Server Name</label>
+                <input value={mt5Server} onChange={e=>setMt5Server(e.target.value)} placeholder="ExclusiveMarkets-Demo"
                   className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-xs text-zinc-200 focus:outline-none focus:border-zinc-600"/>
               </div>
             </div>
-            <div className="flex items-center gap-3">
-              <button onClick={connectMt5} disabled={mt5Connecting || !mt5Login || !mt5Pass || !mt5Server}
-                className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:bg-zinc-800 disabled:text-zinc-600 text-black font-bold text-xs transition-colors flex items-center gap-2">
-                {mt5Connecting ? <><span className="animate-spin">↻</span> Connecting...</> : '▶ Connect to MetaApi Cloud'}
-              </button>
-              <span className="text-[10px] text-zinc-700">Requires METAAPI_TOKEN in Vercel env vars</span>
-            </div>
+            <button onClick={connectMt5} disabled={mt5Connecting || !mt5Login || !mt5Pass || !mt5Server}
+              className="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:bg-zinc-800 disabled:text-zinc-600 text-black font-bold text-xs transition-colors flex items-center justify-center gap-2">
+              {mt5Connecting ? <><span className="animate-spin">↻</span> Connecting to broker...</> : '▶ Connect MT5 Account'}
+            </button>
             {mt5Result && (
               <div className={cx('rounded-lg border p-3 text-xs', mt5Result.error?'border-red-800 bg-red-900/10 text-red-400':'border-emerald-800 bg-emerald-900/10 text-emerald-400')}>
-                {mt5Result.error ? `Error: ${mt5Result.error}` : `✓ ${mt5Result.message}`}
+                {mt5Result.error ? `✗ ${mt5Result.error}` : `✓ Connected to ${mt5Result.brokerName}`}
               </div>
             )}
           </div>

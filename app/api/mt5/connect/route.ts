@@ -1,113 +1,77 @@
-import { NextRequest, NextResponse } from 'next/server';
+export const runtime = 'edge';
 export const dynamic = 'force-dynamic';
 
-const TOKEN = process.env.METAAPI_TOKEN ?? '';
-const PROV = 'https://mt-provisioning-api-v1.agiliumtrade.agiliumtrade.ai';
+// mtapi.io - free MT5 REST API, no registration needed
+// Docs: https://mt5doc.mtapi.io/
+const BASE = 'https://mt5.mtapi.io';
 
-async function provReq(path: string, method = 'GET', body?: any) {
-  const res = await fetch(`${PROV}${path}`, {
-    method,
-    headers: {
-      'auth-token': TOKEN,
-      'Content-Type': 'application/json',
-    },
-    body: body ? JSON.stringify(body) : undefined,
-    cache: 'no-store',
-  });
-  const data = await res.json().catch(() => ({}));
-  return { ok: res.ok, status: res.status, data };
-}
-
-// POST — register MT5 account with MetaApi
-export async function POST(req: NextRequest) {
-  if (!TOKEN) return NextResponse.json({ error: 'METAAPI_TOKEN not set in Vercel env vars' }, { status: 500 });
-
-  const { login, password, server, accountName } = await req.json();
-  if (!login || !password || !server) return NextResponse.json({ error: 'login, password, server required' }, { status: 400 });
-
-  // Check if already exists
-  const list = await provReq(`/users/current/accounts?limit=100`);
-  if (list.ok) {
-    const items: any[] = Array.isArray(list.data) ? list.data : (list.data.items ?? []);
-    const existing = items.find((a: any) => String(a.login) === String(login) && a.server === server);
-    if (existing) {
-      // Re-deploy if not deployed
-      if (existing.state !== 'DEPLOYED') {
-        await provReq(`/users/current/accounts/${existing.id}/deploy`, 'POST');
-      }
-      return NextResponse.json({
-        success: true,
-        accountId: existing.id,
-        state: existing.state,
-        message: existing.state === 'DEPLOYED'
-          ? 'Account already connected — click Accounts tab'
-          : `Account exists (${existing.state}) — redeploying...`,
-      });
+export async function POST(req: Request) {
+  try {
+    const body = await req.json();
+    const { login, password, server } = body;
+    if (!login || !password || !server) {
+      return Response.json({ error: 'login, password, server required' }, { status: 400 });
     }
+
+    // Step 1: Search for broker host by server name
+    const searchRes = await fetch(`${BASE}/Search?keywords=${encodeURIComponent(server)}`);
+    if (!searchRes.ok) {
+      return Response.json({ error: 'broker search failed', status: searchRes.status });
+    }
+    const brokers = await searchRes.json();
+    if (!brokers || brokers.length === 0) {
+      return Response.json({ error: `Broker "${server}" not found. Check server name.` });
+    }
+
+    // Use first matching broker
+    const broker = brokers[0];
+    const host = broker.Host ?? broker.host ?? broker.ip;
+    const port = broker.Port ?? broker.port ?? 443;
+
+    // Step 2: Connect with credentials
+    const connectRes = await fetch(
+      `${BASE}/Connect?user=${login}&password=${encodeURIComponent(password)}&host=${host}&port=${port}`
+    );
+    const connectText = await connectRes.text();
+    let token = '';
+    try { token = JSON.parse(connectText); } catch { token = connectText.replace(/"/g, ''); }
+
+    if (!token || token.startsWith('Error') || token.includes('error')) {
+      return Response.json({ error: `Connection failed: ${token}` });
+    }
+
+    return Response.json({ success: true, token, host, port, brokerName: broker.CompanyName ?? server });
+  } catch (e: any) {
+    return Response.json({ error: e.message }, { status: 500 });
   }
-
-  // Create account
-  const create = await provReq('/users/current/accounts', 'POST', {
-    name: accountName || `VECTOR-${login}`,
-    type: 'cloud',
-    login: String(login),
-    password,
-    server,
-    platform: 'mt5',
-    application: 'MetaApi',
-    magic: 73921,
-    reliability: 'regular',
-    quoteStreamingIntervalInSeconds: 2.5,
-  });
-
-  if (!create.ok) {
-    // Return the full MetaApi error — includes suggested server names
-    const msg = create.data?.message ?? create.data?.details ?? JSON.stringify(create.data);
-    return NextResponse.json({ error: `MetaApi: ${msg}` }, { status: create.status });
-  }
-
-  const acc = create.data;
-  // Handle "retry" response from MetaApi (broker detection in progress)
-  if (acc.message && !acc.id) {
-    return NextResponse.json({
-      success: true,
-      pending: true,
-      retryAfter: acc.retryAfterSeconds ?? 60,
-      message: acc.message,
-    });
-  }
-
-  return NextResponse.json({
-    success: true,
-    accountId: acc.id,
-    state: acc.state ?? 'DEPLOYING',
-    message: 'Account registered. MetaApi is connecting to your broker (30-90s)...',
-  });
 }
 
-// GET — list all MT5 accounts with full status
-export async function GET() {
-  if (!TOKEN) return NextResponse.json({ accounts: [], error: 'METAAPI_TOKEN not set' });
+export async function GET(req: Request) {
+  const { searchParams } = new URL(req.url);
+  const token = searchParams.get('token');
+  const action = searchParams.get('action') ?? 'account';
 
-  const { ok, data, status } = await provReq('/users/current/accounts?limit=100');
-  if (!ok) {
-    return NextResponse.json({
-      accounts: [],
-      error: `MetaApi returned ${status}: ${data?.message ?? JSON.stringify(data)}`,
-    });
+  if (!token) return Response.json({ error: 'token required' });
+
+  const BASE = 'https://mt5.mtapi.io';
+
+  if (action === 'account') {
+    const r = await fetch(`${BASE}/AccountSummary?id=${token}`);
+    const data = await r.json();
+    return Response.json(data);
   }
 
-  const items: any[] = Array.isArray(data) ? data : (data.items ?? []);
-  const accounts = items.map((a: any) => ({
-    id: a.id ?? a._id,
-    name: a.name,
-    login: a.login,
-    server: a.server,
-    platform: a.platform ?? 'mt5',
-    state: a.state,
-    // connectionStatus is only in the client API, provisioning only has state
-    connectionStatus: a.connectionStatus ?? a.state,
-  }));
+  if (action === 'positions') {
+    const r = await fetch(`${BASE}/Positions?id=${token}`);
+    const data = await r.json();
+    return Response.json(data);
+  }
 
-  return NextResponse.json({ accounts, count: accounts.length });
+  if (action === 'orders') {
+    const r = await fetch(`${BASE}/PendingOrders?id=${token}`);
+    const data = await r.json();
+    return Response.json(data);
+  }
+
+  return Response.json({ error: 'unknown action' });
 }
