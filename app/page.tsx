@@ -1410,7 +1410,7 @@ function AgentsTab() {
               <span className="text-emerald-400 font-bold">✓ Cycle complete in {runResult.elapsed_s}s</span>
               <span className="text-zinc-400">{runResult.symbols_scanned} symbols scanned</span>
               <span className={cx('font-bold', runResult.approved_trades>0?'text-emerald-400':'text-zinc-500')}>
-                {runResult.approved_trades} trade{runResult.approved_trades!==1?'s':''} approved (score ≥8)
+                {runResult.approved_trades} trade{runResult.approved_trades!==1?'s':''} approved (score ≥7)
               </span>
             </div>
           )}

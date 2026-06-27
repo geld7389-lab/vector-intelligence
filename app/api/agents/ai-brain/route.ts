@@ -88,15 +88,16 @@ export async function POST(req: NextRequest) {
   const candidates: any[] = [];
   for (const [sym, tech] of Object.entries(confluence) as [string,any][]) {
     const bias = biases[sym];
-    if (!bias || bias === 'neutral') continue;
-
-    const direction = bias === 'bullish' ? 'buy' : 'sell';
+    // Include all symbols, even neutral — let AI decide direction from technicals
+    const direction = (bias === 'bullish' || tech.ema_stack === 'bullish') ? 'buy' :
+                      (bias === 'bearish' || tech.ema_stack === 'bearish') ? 'sell' : 'buy';
+    if (!tech) continue;
     const symFvgs = fvgs.filter((f:any)=>f.symbol===sym);
     const symObs  = order_blocks.filter((o:any)=>o.symbol===sym);
 
     candidates.push({
       symbol: sym, direction,
-      bias_h4: bias,
+      bias_h4: bias ?? 'neutral',
       bias_h1: tech.ema_stack === 'bullish' ? 'bullish' : tech.ema_stack === 'bearish' ? 'bearish' : 'neutral',
       rsi: tech.rsi,
       rsi_signal: tech.rsi_signal,
