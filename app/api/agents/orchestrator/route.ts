@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { sb } from '../../../../lib/supabase';
 export const dynamic = 'force-dynamic';
-export const maxDuration = 60;
+export const maxDuration = 120;
 
 const BASE = process.env.VERCEL_URL
   ? `https://${process.env.VERCEL_URL}`
@@ -11,13 +11,13 @@ const GROQ_KEY = process.env.GROQ_API_KEY ?? 'gsk_2VNrHBJTzKOyOFh6gYImWGdyb3FY0q
 
 const SYMBOLS = ['NQ','ES','GC','EURUSD','GBPUSD','USDJPY','BTC','ETH','CL'];
 
-async function callAgent(path: string, body: any) {
+async function callAgent(path: string, body: any, timeoutMs = 25000) {
   try {
     const r = await fetch(`${BASE}/api/agents/${path}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
-      signal: AbortSignal.timeout(25000),
+      signal: AbortSignal.timeout(timeoutMs),
     });
     return r.ok ? await r.json() : null;
   } catch { return null; }
@@ -98,7 +98,7 @@ export async function POST(req: NextRequest) {
     approved_trades: brainResult?.approved ?? [],
     risk: riskResult ?? {},
     mt5_token: mt5Token,
-  });
+  }, 55000);
   results.executor = execResult;
   await saveAgentStatus('executor', 'running',
     execResult
