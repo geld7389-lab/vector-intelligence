@@ -14,6 +14,30 @@ export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const token = searchParams.get('token') ?? '';
   const action = searchParams.get('action') ?? 'symbols';
+  if (action === 'fulltest') {
+    const login = searchParams.get('login') ?? '8029341';
+    const password = searchParams.get('password') ?? '';
+    const server = searchParams.get('server') ?? 'ExclusiveMarkets-Demo';
+    if (!password) return Response.json({ error: 'password required' });
+
+    const connUrl = `${BASE}/ConnectEx?user=${login}&password=${encodeURIComponent(password)}&server=${encodeURIComponent(server)}&connectTimeoutSeconds=30&connectTimeoutClusterMemberSeconds=15&errorReplyStatusCode=201`;
+    const cr = await fetch(connUrl, { headers: { accept: 'text/plain' }, signal: AbortSignal.timeout(35000) });
+    const freshToken = (await cr.text()).replace(/"/g, '').trim();
+    if (!freshToken || freshToken.length < 10) return Response.json({ error: `Connect failed: ${freshToken}` });
+
+    const qr = await fetch(`${BASE}/Quote?symbol=EURUSD.&id=${freshToken}`, { headers: { accept: 'text/json' }, signal: AbortSignal.timeout(8000) });
+    const quote = await qr.json().catch(() => null);
+    const price = quote?.Bid ?? quote?.bid;
+    if (!price) return Response.json({ error: 'no quote', quote, token: freshToken });
+
+    const sl = +(price + 0.001).toFixed(5);
+    const tp = +(price - 0.002).toFixed(5);
+    const orderUrl = `${BASE}/OrderSend?id=${freshToken}&symbol=EURUSD.&operation=1&volume=0.01&sl=${sl}&tp=${tp}`;
+    const tr = await fetch(orderUrl, { headers: { accept: 'text/json' }, signal: AbortSignal.timeout(10000) });
+    const tradeResult = await tr.text();
+    return Response.json({ token: freshToken, price, sl, tp, orderUrl: orderUrl.replace(freshToken, 'HIDDEN'), tradeResult, tradeStatus: tr.status });
+  }
+
   if (!token) return Response.json({ error: 'token required' });
 
   if (action === 'symbols') {
