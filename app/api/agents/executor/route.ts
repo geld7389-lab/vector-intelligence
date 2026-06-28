@@ -56,8 +56,9 @@ async function getAccountInfo(token: string) {
 }
 
 async function placeTrade(token: string, symbol: string, direction: string, volume: number, sl: number, tp: number) {
-  const op = direction === 'buy' ? 0 : 1;
-  const url = `${MT5_BASE}/OrderSend?id=${token}&symbol=${encodeURIComponent(symbol)}&operation=${op}&volume=${volume}&sl=${sl}&tp=${tp}`;
+  // mtapi.io uses "Buy"/"Sell" strings for market orders, no price needed
+  const operation = direction === 'buy' ? 'Buy' : 'Sell';
+  const url = `${MT5_BASE}/OrderSend?id=${token}&symbol=${encodeURIComponent(symbol)}&operation=${operation}&volume=${volume}&sl=${sl}&tp=${tp}`;
   try {
     const r = await fetch(url, {
       headers: { accept: 'text/json' },
@@ -172,65 +173,41 @@ export async function POST(req: NextRequest) {
     const defaultSl = DEFAULT_SL_POINTS[mt5Symbol] ?? 30;
 
     try {
-      // Get live price
-      const quote = await getCurrentPrice(token, mt5Symbol, trade.symbol);
-      const price = trade.direction === 'buy'
-        ? (quote?.ask ?? 0)
-        : (quote?.bid ?? 0);
+      // Get price from Yahoo Finance (MT5 Quote endpoint needs WebSocket subscription to stream)
+      let usePrice = 0;
+      const ySym = YAHOO_MAP[trade.symbol] ?? `${trade.symbol}=F`;
+      try {
+        const yr = await fetch(
+          `https://query1.finance.yahoo.com/v8/finance/chart/${ySym}?interval=1m&range=1d`,
+          { headers: { 'User-Agent': 'Mozilla/5.0' }, signal: AbortSignal.timeout(8000) }
+        );
+        const yj = await yr.json();
+        usePrice = yj?.chart?.result?.[0]?.meta?.regularMarketPrice ?? 0;
+      } catch {}
 
-      if (!price) {
-        failed.push({ symbol: trade.symbol, reason: `Could not get price for ${mt5Symbol} (tried MT5 + Yahoo)` });
+      if (!usePrice) {
+        failed.push({ symbol: trade.symbol, reason: 'Could not get price from Yahoo Finance' });
         continue;
       }
 
-      // Calculate SL/TP
-      const slPoints = defaultSl * pointSize;
-      const tpPoints = slPoints * 2; // 1:2 RR minimum
-      const sl = trade.direction === 'buy' ? price - slPoints : price + slPoints;
-      const tp = trade.direction === 'buy' ? price + tpPoints : price - tpPoints;
+      // SL/TP calculation
+      const ptSize = POINT_SIZE[trade.symbol] ?? pointSize;
+      const slPts = DEFAULT_SL_POINTS[trade.symbol] ?? defaultSl;
+      const useSl = trade.direction === 'buy'
+        ? +(usePrice - slPts * ptSize).toFixed(5)
+        : +(usePrice + slPts * ptSize).toFixed(5);
+      const useTp = trade.direction === 'buy'
+        ? +(usePrice + slPts * ptSize * 2).toFixed(5)
+        : +(usePrice - slPts * ptSize * 2).toFixed(5);
 
-      // Position size: risk$ / SL in $ = lots
-      // Simplified: for forex 1 lot = $10/pip, for indices = $1/point
-      let volume = parseFloat((riskAmount / (defaultSl * 1)).toFixed(2));
+      let volume = parseFloat((riskAmount / (slPts * 1)).toFixed(2));
       volume = Math.max(0.01, Math.min(volume, 0.10));
 
-      // Execute trade — try multiple symbol name variants
-      const symbolVariants: Record<string, string[]> = {
-        NQ: ['US100.', 'US100'],
-        ES: ['US500.', 'US500'],
-        GC: ['XAUUSD.', 'XAUUSD'],
-        CL: ['USOIL.', 'USOIL'],
-        BTC: ['BTCUSD.', 'BTCUSD'],
-        ETH: ['ETHUSD.', 'ETHUSD'],
-        EURUSD: ['EURUSD.', 'EURUSD'],
-        GBPUSD: ['GBPUSD.', 'GBPUSD'],
-        USDJPY: ['USDJPY.', 'USDJPY'],
-      };
-      const variants = symbolVariants[trade.symbol] ?? [mt5Symbol];
+      // Use dot-suffix symbol name for ExclusiveMarkets
+      const usedSymbol = MT5_SYMBOL_MAP[trade.symbol] ?? (trade.symbol + '.');
 
-      let result: any = null;
-      let usedSymbol = variants[0];
-      let usePrice = price;
-      let useSl = sl;
-      let useTp = tp;
-
-      for (const sym of variants) {
-        const qTest = await fetch(`${MT5_BASE}/Quote?symbol=${sym}&id=${token}`, {
-          headers: { accept: 'text/json' }, signal: AbortSignal.timeout(5000)
-        }).catch(() => null);
-        if (!qTest?.ok) continue;
-        const qData = await qTest.json().catch(() => null);
-        if (!qData?.Ask && !qData?.Bid) continue;
-
-        usedSymbol = sym;
-        usePrice = trade.direction === 'buy' ? (qData.Ask ?? price) : (qData.Bid ?? price);
-        const slPts = DEFAULT_SL_POINTS[sym.replace('.', '')] ?? defaultSl;
-        const ptSize = POINT_SIZE[sym.replace('.', '')] ?? pointSize;
-        useSl = trade.direction === 'buy' ? +(usePrice - slPts * ptSize).toFixed(5) : +(usePrice + slPts * ptSize).toFixed(5);
-        useTp = trade.direction === 'buy' ? +(usePrice + slPts * ptSize * 2).toFixed(5) : +(usePrice - slPts * ptSize * 2).toFixed(5);
-        result = await placeTrade(token, sym, trade.direction, volume, useSl, useTp);
-        break;
-      }
+      // Place market order — operation is "Buy" or "Sell" string
+      const result = await placeTrade(token, usedSymbol, trade.direction, volume, useSl, useTp);
       const ticket = result?.Id ?? result?.id ?? result?.ticket ?? result?.Ticket ?? result?.raw;
 
       if (ticket && !String(ticket).includes('error') && !String(ticket).includes('Error') && !String(ticket).includes('message')) {
