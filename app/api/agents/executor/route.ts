@@ -48,18 +48,26 @@ async function mt5Request(path: string, token: string) {
 }
 
 async function getAccountInfo(token: string) {
-  return mt5Request('AccountSummary?', token);
+  const r = await fetch(`${MT5_BASE}/AccountSummary?id=${token}`, {
+    headers: { accept: 'text/json' },
+    signal: AbortSignal.timeout(10000),
+  });
+  return r.ok ? r.json() : null;
 }
 
 async function placeTrade(token: string, symbol: string, direction: string, volume: number, sl: number, tp: number) {
   const op = direction === 'buy' ? 0 : 1;
-  const path = `OrderSend?symbol=${symbol}&operation=${op}&volume=${volume}&sl=${sl}&tp=${tp}`;
-  const r = await fetch(`${MT5_BASE}/${path}&id=${token}`, {
-    headers: { accept: 'text/json' },
-    signal: AbortSignal.timeout(15000),
-  });
-  const text = await r.text();
-  try { return JSON.parse(text); } catch { return { raw: text }; }
+  const url = `${MT5_BASE}/OrderSend?id=${token}&symbol=${encodeURIComponent(symbol)}&operation=${op}&volume=${volume}&sl=${sl}&tp=${tp}`;
+  try {
+    const r = await fetch(url, {
+      headers: { accept: 'text/json' },
+      signal: AbortSignal.timeout(10000),
+    });
+    const text = await r.text();
+    try { return JSON.parse(text); } catch { return { raw: text }; }
+  } catch (e: any) {
+    return { error: e.message };
+  }
 }
 
 async function getCurrentPrice(token: string, symbol: string, vectorSymbol: string) {
