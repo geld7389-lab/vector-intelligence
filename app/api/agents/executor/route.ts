@@ -213,17 +213,14 @@ export async function POST(req: NextRequest) {
       if (ticket && !String(ticket).includes('error') && !String(ticket).includes('Error') && !String(ticket).includes('message')) {
         await sb.from('trades').insert({
           symbol: trade.symbol,
-          direction: trade.direction,
-          entry: usePrice,
-          sl: useSl,
-          tp: useTp,
-          volume,
-          risk_pct: riskPct * 100,
-          status: 'open',
-          setup_score: trade.setup_score,
-          notes: `Agent: ${trade.primary_reason ?? ''}`,
-          mt5_ticket: String(ticket),
-          open_time: new Date().toISOString(),
+          direction: trade.direction === 'buy' ? 'long' : 'short',
+          entry_price: usePrice,
+          stop_loss: useSl,
+          take_profit: useTp,
+          risk_percent: riskPct * 100,
+          result: 'open',
+          opened_at: new Date().toISOString(),
+          notes: `Agent execution | Score: ${trade.setup_score} | ${trade.primary_reason ?? ''} | Ticket: ${String(ticket)} | MT5: ${usedSymbol}`,
         });
 
         executed.push({

@@ -872,13 +872,19 @@ function TradesTab({ onNew, onJournal }: { onNew?: () => void; onJournal?: (t:an
         <span className="text-xs text-zinc-500 uppercase tracking-wider">Open · {open.length}</span>
         {onNew && <button onClick={onNew} className="text-xs px-3 py-1.5 rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-400 hover:border-zinc-500">+ Manual</button>}
       </div>
-      {open.map(t => (
+      {open.map(t => {
+        const isAgent = t.notes?.includes('Agent execution');
+        const ticket = t.notes?.match(/Ticket: ([^\s|]+)/)?.[1];
+        return (
         <div key={t.id} className="rounded-xl border border-zinc-800/60 bg-zinc-900/40 p-3">
           <div className="flex justify-between items-start">
             <div className="flex items-center gap-2">
               <span className="text-sm font-mono font-bold text-white">{t.symbol}</span>
-              <span className={cx('text-xs', t.direction==='bull'||t.direction==='long'?'text-emerald-400':'text-red-400')}>{t.direction==='bull'||t.direction==='long'?'↑':'↓'}</span>
-              <span className="text-xs text-zinc-600">{t.setup_type ?? 'Manual'} · {t.session}</span>
+              <span className={cx('text-xs font-bold px-1.5 py-0.5 rounded', t.direction==='bull'||t.direction==='long'||t.direction==='buy'?'bg-emerald-900/50 text-emerald-400':'bg-red-900/50 text-red-400')}>
+                {t.direction==='bull'||t.direction==='long'||t.direction==='buy'?'BUY':'SELL'}
+              </span>
+              {isAgent && <span className="text-[10px] px-1.5 py-0.5 rounded bg-violet-900/50 text-violet-400">AI Agent</span>}
+              {ticket && <span className="text-[10px] text-zinc-600 font-mono">#{ticket}</span>}
             </div>
             <div className="flex gap-2">
               <button onClick={()=>setClosing(t)} className="text-xs px-2 py-1 rounded bg-zinc-700 hover:bg-zinc-600 text-zinc-300">Close</button>
@@ -891,9 +897,10 @@ function TradesTab({ onNew, onJournal }: { onNew?: () => void; onJournal?: (t:an
             <div>TP <span className="text-emerald-400">{t.target}</span></div>
             <div>Risk <span className="text-zinc-400">${t.risk_dollars}</span></div>
           </div>
-          {t.mistakes?.length > 0 && <div className="mt-1.5 flex flex-wrap gap-1">{t.mistakes.map((m:string)=><span key={m} className="text-xs bg-red-900/30 text-red-400 px-1.5 py-0.5 rounded">{m}</span>)}</div>}
+          {t.notes && isAgent && <p className="text-[10px] text-zinc-700 mt-1 truncate">{t.notes.split('|')[1]?.trim()}</p>}
         </div>
-      ))}
+        );
+      })}
       {closed.length > 0 && (
         <>
           <div className="text-xs text-zinc-600 uppercase tracking-wider pt-2">Closed · {closed.length}</div>
@@ -1280,16 +1287,53 @@ function AgentsTab() {
 
   const loadMt5Accounts = React.useCallback(async (token?: string) => {
     const t = token ?? mt5Token;
-    if (!t) return;
     setMt5Loading(true); setMt5Error(null);
     try {
-      const r = await fetch(`/api/mt5/account?token=${t}`);
+      // If no token, try to auto-reconnect using saved credentials from Supabase
+      let useToken = t;
+      if (!useToken) {
+        const sr = await fetch('/api/agents/status');
+        const sd = await sr.json();
+        const sess = sd.agents?.mt5_session?.data;
+        if (sess?.token) useToken = sess.token;
+      }
+      if (!useToken) { setMt5Loading(false); return; }
+
+      const r = await fetch(`/api/mt5/account?token=${useToken}`);
       const d = await r.json();
       if (d.account?.error || !d.connected) {
-        setMt5Error('Session expired. Please reconnect.');
-        setMt5Token(null);
-        localStorage.removeItem('mt5_token');
+        // Token expired — auto-reconnect using saved credentials
+        const sr = await fetch('/api/agents/status');
+        const sd = await sr.json();
+        const sess = sd.agents?.mt5_session?.data;
+        if (sess?.login && sess?.password && sess?.server) {
+          const cr = await fetch('/api/mt5/connect', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ login: sess.login, password: sess.password, server: sess.server }),
+          });
+          const cd = await cr.json();
+          if (cd.success && cd.token) {
+            setMt5Token(cd.token);
+            localStorage.setItem('mt5_token', cd.token);
+            // Save new token
+            await fetch('/api/agents/status', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ agent: 'mt5_session', token: cd.token, broker: sess.broker, login: sess.login, password: sess.password, server: sess.server }),
+            });
+            // Reload with new token
+            const r2 = await fetch(`/api/mt5/account?token=${cd.token}`);
+            const d2 = await r2.json();
+            if (d2.connected) setMt5AccountInfo(d2);
+          }
+        } else {
+          setMt5Error('Session expired. Please reconnect.');
+          setMt5Token(null);
+          localStorage.removeItem('mt5_token');
+        }
       } else {
+        setMt5Token(useToken);
         setMt5AccountInfo(d);
       }
     } catch(e: any) { setMt5Error(e.message); }
@@ -1658,28 +1702,36 @@ function AgentsTab() {
                       ))}
                     </div>
                   )}
-                  {mt5AccountInfo.positions?.length > 0 && (
+                  {(mt5AccountInfo.positions?.length > 0 || mt5AccountInfo.orders?.length > 0) && (
                     <div className="mt-3">
-                      <div className="text-[10px] text-zinc-600 mb-2">Open Positions ({mt5AccountInfo.positions.length})</div>
+                      <div className="text-[10px] text-zinc-600 mb-2">
+                        Open Positions ({mt5AccountInfo.positions?.length ?? 0}) · Pending ({mt5AccountInfo.orders?.length ?? 0})
+                      </div>
                       <div className="space-y-1">
-                        {mt5AccountInfo.positions.slice(0,5).map((p: any, i: number) => (
-                          <div key={i} className="flex items-center justify-between text-[11px] py-1 border-b border-zinc-900">
-                            <div className="flex items-center gap-2">
-                              <span className={cx('px-1.5 py-0.5 rounded text-[10px] font-bold',
-                                (p.Type===0||p.type===0||p.action==='buy')?'bg-emerald-900/60 text-emerald-400':'bg-red-900/60 text-red-400')}>
-                                {(p.Type===0||p.type===0||p.action==='buy')?'BUY':'SELL'}
-                              </span>
-                              <span className="font-mono text-zinc-200">{p.Symbol ?? p.symbol}</span>
-                              <span className="text-zinc-600">{p.Volume ?? p.volume} lots</span>
+                        {[...(mt5AccountInfo.positions ?? []), ...(mt5AccountInfo.orders ?? [])].slice(0,8).map((p: any, i: number) => {
+                          const isBuy = p.Type===0 || p.type===0 || p.orderType==='Buy' || p.action==='buy';
+                          const sym = p.Symbol ?? p.symbol ?? p.Instrument ?? '—';
+                          const lots = p.Volume !== undefined ? (p.Volume/100000).toFixed(2) : (p.lots ?? p.volume ?? 0);
+                          const opPrice = p.PriceOpen ?? p.openPrice ?? p.OpenPrice ?? p.Price ?? 0;
+                          const profit = p.Profit ?? p.profit ?? 0;
+                          return (
+                            <div key={i} className="flex items-center justify-between text-[11px] py-1 border-b border-zinc-800">
+                              <div className="flex items-center gap-2">
+                                <span className={cx('px-1.5 py-0.5 rounded text-[10px] font-bold', isBuy?'bg-emerald-900/60 text-emerald-400':'bg-red-900/60 text-red-400')}>
+                                  {isBuy?'BUY':'SELL'}
+                                </span>
+                                <span className="font-mono text-zinc-200">{sym}</span>
+                                <span className="text-zinc-600">{lots} lots</span>
+                              </div>
+                              <div className="flex items-center gap-3">
+                                <span className="text-zinc-500">@ {Number(opPrice).toFixed(5)}</span>
+                                <span className={cx('font-bold font-mono', profit>=0?'text-emerald-400':'text-red-400')}>
+                                  {profit>=0?'+':''}{Number(profit).toFixed(2)}
+                                </span>
+                              </div>
                             </div>
-                            <div className="flex items-center gap-3">
-                              <span className="text-zinc-500">@ {(p.PriceOpen ?? p.openPrice)?.toFixed(5)}</span>
-                              <span className={cx('font-bold', (p.Profit ?? p.profit ?? 0)>=0?'text-emerald-400':'text-red-400')}>
-                                {(p.Profit ?? p.profit ?? 0)>=0?'+':''}{(p.Profit ?? p.profit ?? 0).toFixed(2)}
-                              </span>
-                            </div>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     </div>
                   )}
