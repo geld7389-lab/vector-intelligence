@@ -55,6 +55,17 @@ export async function GET(req: Request) {
     return Response.json({ total: parsed ? Object.keys(parsed).length : 0, oilLike, sampleKeys: parsed ? Object.keys(parsed).slice(0, 30) : [] });
   }
 
+  if (action === 'modify') {
+    const ticket = searchParams.get('ticket');
+    const sl = searchParams.get('sl');
+    const tp = searchParams.get('tp');
+    if (!ticket || !sl || !tp) return Response.json({ error: 'ticket, sl, tp required' });
+    const url = `${BASE}/OrderModify?id=${token}&ticket=${ticket}&sl=${sl}&tp=${tp}`;
+    const r = await fetch(url, { headers: { accept: 'text/json' }, signal: AbortSignal.timeout(10000) });
+    const text = await r.text();
+    return Response.json({ status: r.status, raw: text, urlUsed: url });
+  }
+
   if (action === 'close') {
     const ticket = searchParams.get('ticket');
     if (!ticket) return Response.json({ error: 'ticket required' });
