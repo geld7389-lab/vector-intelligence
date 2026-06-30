@@ -2,31 +2,78 @@ export const runtime = 'edge';
 export const dynamic = 'force-dynamic';
 const BASE = 'https://mt5.mtapi.io';
 
+// SAFETY: this route previously placed a REAL market order on every single GET
+// request, regardless of params — including from accidental hits, crawlers, or
+// manual testing. It now requires an explicit ?action= and a real trade is only
+// ever placed with action=testtrade AND confirm=yes.
+
+async function connect(login: string, password: string, server: string) {
+  const cr = await fetch(
+    `${BASE}/ConnectEx?user=${login}&password=${encodeURIComponent(password)}&server=${encodeURIComponent(server)}&connectTimeoutSeconds=30&connectTimeoutClusterMemberSeconds=15&errorReplyStatusCode=201`,
+    { headers: { accept: 'text/plain' }, signal: AbortSignal.timeout(35000) }
+  );
+  const t = (await cr.text()).replace(/"/g, '').trim();
+  return t && t.length > 10 ? t : null;
+}
+
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
+  const action = searchParams.get('action');
   const login = searchParams.get('login') ?? '8029341';
   const password = searchParams.get('password') ?? '';
   const server = searchParams.get('server') ?? 'ExclusiveMarkets-Demo';
-  if (!password) return Response.json({ error: 'password required' });
+  let token = searchParams.get('token');
 
-  // Fresh connect
-  const cr = await fetch(`${BASE}/ConnectEx?user=${login}&password=${encodeURIComponent(password)}&server=${encodeURIComponent(server)}&connectTimeoutSeconds=30&connectTimeoutClusterMemberSeconds=15&errorReplyStatusCode=201`, { headers: { accept: 'text/plain' }, signal: AbortSignal.timeout(35000) });
-  const t = (await cr.text()).replace(/"/g, '').trim();
-  if (!t || t.length < 10) return Response.json({ error: `Connect failed: ${t}` });
+  if (!action) {
+    return Response.json({
+      error: 'action required',
+      available_actions: ['raw_positions', 'symbols', 'close', 'testtrade'],
+      note: 'This route no longer auto-trades. Pass an explicit action.',
+    });
+  }
 
-  // Get Yahoo price for EURUSD
-  const yr = await fetch('https://query1.finance.yahoo.com/v8/finance/chart/EURUSD=X?interval=1m&range=1d', { headers: { 'User-Agent': 'Mozilla/5.0' }, signal: AbortSignal.timeout(6000) });
-  const yj = await yr.json();
-  const price = yj?.chart?.result?.[0]?.meta?.regularMarketPrice ?? 0;
-  if (!price) return Response.json({ error: 'no yahoo price', token: t });
+  if (!token && password) {
+    token = await connect(login, password, server);
+    if (!token) return Response.json({ error: 'connect failed' });
+  }
+  if (!token) return Response.json({ error: 'token or password required' });
 
-  const sl = +(price + 0.001).toFixed(5);
-  const tp = +(price - 0.002).toFixed(5);
+  if (action === 'raw_positions') {
+    const r = await fetch(`${BASE}/Positions?id=${token}`, { headers: { accept: 'text/json' }, signal: AbortSignal.timeout(10000) });
+    const text = await r.text();
+    return Response.json({ status: r.status, raw: text });
+  }
 
-  // Place SELL order using "Sell" string operation
-  const orderUrl = `${BASE}/OrderSend?id=${t}&symbol=EURUSD.&operation=Sell&volume=0.01&sl=${sl}&tp=${tp}`;
-  const tr = await fetch(orderUrl, { headers: { accept: 'text/json' }, signal: AbortSignal.timeout(10000) });
-  const tradeResult = await tr.text();
+  if (action === 'symbols') {
+    const r = await fetch(`${BASE}/Symbols?id=${token}`, { headers: { accept: 'text/json' }, signal: AbortSignal.timeout(15000) });
+    const text = await r.text();
+    let parsed: any = null;
+    try { parsed = JSON.parse(text); } catch {}
+    const oilLike = parsed && typeof parsed === 'object'
+      ? Object.keys(parsed).filter(k => /OIL|WTI|CRUDE|CL\b/i.test(k))
+      : [];
+    return Response.json({ total: parsed ? Object.keys(parsed).length : 0, oilLike, sampleKeys: parsed ? Object.keys(parsed).slice(0, 30) : [] });
+  }
 
-  return Response.json({ token: t, price, sl, tp, tradeResult, tradeStatus: tr.status });
+  if (action === 'close') {
+    const ticket = searchParams.get('ticket');
+    if (!ticket) return Response.json({ error: 'ticket required' });
+    const r = await fetch(`${BASE}/OrderClose?id=${token}&ticket=${ticket}`, { headers: { accept: 'text/json' }, signal: AbortSignal.timeout(10000) });
+    const text = await r.text();
+    return Response.json({ status: r.status, raw: text });
+  }
+
+  if (action === 'testtrade') {
+    if (searchParams.get('confirm') !== 'yes') {
+      return Response.json({ error: 'this places a REAL order — add &confirm=yes to proceed' });
+    }
+    const symbol = searchParams.get('symbol') ?? 'EURUSD.';
+    const operation = searchParams.get('operation') ?? 'Sell';
+    const volume = searchParams.get('volume') ?? '0.01';
+    const r = await fetch(`${BASE}/OrderSend?id=${token}&symbol=${encodeURIComponent(symbol)}&operation=${operation}&volume=${volume}`, { headers: { accept: 'text/json' }, signal: AbortSignal.timeout(10000) });
+    const text = await r.text();
+    return Response.json({ status: r.status, raw: text, token });
+  }
+
+  return Response.json({ error: `unknown action: ${action}` });
 }
