@@ -19,3 +19,5 @@ export async function POST() {
     return NextResponse.json({ error: e.message }, { status: 500 });
   }
 }
+
+export const GET = POST; // TEMP for verification — will be reverted
