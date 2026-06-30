@@ -55,6 +55,19 @@ export async function GET(req: Request) {
     return Response.json({ total: parsed ? Object.keys(parsed).length : 0, oilLike, sampleKeys: parsed ? Object.keys(parsed).slice(0, 30) : [] });
   }
 
+  if (action === 'test_ordersend_sltp') {
+    // Test whether OrderSend accepts sl/tp inline for market orders
+    const symbol = searchParams.get('symbol') ?? 'ETHUSD.';
+    const operation = searchParams.get('operation') ?? 'Sell';
+    const sl = searchParams.get('sl') ?? '1590';
+    const tp = searchParams.get('tp') ?? '1544';
+    const volume = searchParams.get('volume') ?? '0.01';
+    const url = `${BASE}/OrderSend?id=${token}&symbol=${encodeURIComponent(symbol)}&operation=${operation}&volume=${volume}&sl=${sl}&tp=${tp}`;
+    const r = await fetch(url, { headers: { accept: 'text/json' }, signal: AbortSignal.timeout(12000) });
+    const text = await r.text();
+    return Response.json({ status: r.status, raw: text, urlUsed: url, token });
+  }
+
   if (action === 'sltp') {
     // Try every known MT5 REST endpoint for setting SL/TP on an open position
     const ticket = searchParams.get('ticket') ?? '59201089';
