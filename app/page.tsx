@@ -1396,6 +1396,7 @@ function AgentsTab() {
     { key:'technical',        name:'Technical Confluence',icon:'TEC', desc:'RSI, EMA, VWAP' },
     { key:'macro',            name:'Macro & Sentiment',   icon:'MAC', desc:'News, DXY, Fear & Greed' },
     { key:'ai_brain',         name:'AI Brain',            icon:'AI', desc:'Groq LLM scores 1–10' },
+    { key:'position_monitor', name:'Position Monitor',    icon:'MON', desc:'Client-side SL/TP enforcement' },
     { key:'risk',             name:'Risk Manager',        icon:'RSK', desc:'Heat, drawdown, loss limits' },
     { key:'executor',         name:'Executor',            icon:'EXE', desc:'Signal & position management' },
     { key:'self_learning',    name:'Self-Learning',       icon:'LRN', desc:'Win rate & performance ML' },

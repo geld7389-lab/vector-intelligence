@@ -40,6 +40,14 @@ export async function POST(req: NextRequest) {
 
   await saveAgentStatus('orchestrator', 'running', 'Starting full agent cycle');
 
+  // 0. Position Monitor — client-side SL/TP enforcement (broker strips stops on this account)
+  // Runs FIRST so closed positions are reflected in risk before new trades are considered.
+  const monitorResult = await callAgent('trades/monitor', {}, 25000);
+  if (monitorResult?.closed?.length) {
+    await saveAgentStatus('position_monitor', 'running',
+      `Closed ${monitorResult.closed.length}: ${monitorResult.closed.map((c:any)=>`${c.symbol} ${c.reason}`).join(', ')}`);
+  }
+
   // 1. Market Structure
   await saveAgentStatus('market_structure', 'running', 'Scanning market structure...');
   const msResult = await callAgent('market-structure', { symbols });

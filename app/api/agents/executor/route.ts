@@ -59,10 +59,10 @@ async function getAccountInfo(token: string) {
 }
 
 async function placeTrade(token: string, symbol: string, direction: string, volume: number) {
-  // mtapi.io uses "Buy"/"Sell" strings for market orders, no price needed.
-  // We intentionally do NOT pass sl/tp here — mtapi.io's GET-style OrderSend does not
-  // reliably honor sl/tp on market orders (broker silently zeroes them). Instead we set
-  // stops in a follow-up OrderModify call against the broker's actual reported fill price.
+  // NOTE: This broker (ExclusiveMarkets-Demo via mtapi.io) silently strips SL/TP
+  // from OrderSend and rejects OrderModify with SAME_PARAMS regardless of values.
+  // SL/TP levels are saved to Supabase and enforced client-side by /api/trades/monitor
+  // which runs at the start of every agent cycle.
   const operation = direction === 'buy' ? 'Buy' : 'Sell';
   const url = `${MT5_BASE}/OrderSend?id=${token}&symbol=${encodeURIComponent(symbol)}&operation=${operation}&volume=${volume}`;
   try {
@@ -70,17 +70,6 @@ async function placeTrade(token: string, symbol: string, direction: string, volu
       headers: { accept: 'text/json' },
       signal: AbortSignal.timeout(10000),
     });
-    const text = await r.text();
-    try { return JSON.parse(text); } catch { return { raw: text }; }
-  } catch (e: any) {
-    return { error: e.message };
-  }
-}
-
-async function modifyStops(token: string, ticket: string | number, sl: number, tp: number) {
-  const url = `${MT5_BASE}/OrderModify?id=${token}&ticket=${ticket}&sl=${sl}&tp=${tp}`;
-  try {
-    const r = await fetch(url, { headers: { accept: 'text/json' }, signal: AbortSignal.timeout(10000) });
     const text = await r.text();
     try { return JSON.parse(text); } catch { return { raw: text }; }
   } catch (e: any) {
@@ -208,45 +197,28 @@ export async function POST(req: NextRequest) {
       }
 
       // SL/TP point distance — actual price levels are computed after fill, against the broker's
-      // real fill price (see modifyStops call below), not this pre-trade estimate.
+      // real fill price for accurate SL/TP calculation
       const ptSize = POINT_SIZE[trade.symbol] ?? pointSize;
       const slPts = DEFAULT_SL_POINTS[trade.symbol] ?? defaultSl;
 
       let volume = parseFloat((riskAmount / (slPts * 1)).toFixed(2));
       volume = Math.max(0.01, Math.min(volume, 0.10));
 
-      // Use dot-suffix symbol name for ExclusiveMarkets
       const usedSymbol = MT5_SYMBOL_MAP[trade.symbol] ?? (trade.symbol + '.');
-
-      // Place market order first (no sl/tp — see placeTrade comment)
       const result = await placeTrade(token, usedSymbol, trade.direction, volume);
       const ticket = result?.Id ?? result?.id ?? result?.ticket ?? result?.Ticket ?? result?.raw;
-      // Broker's actual fill price — Yahoo price is only an estimate, real stops must be
-      // calculated against this or the broker rejects them as invalid distance.
+      // Use broker's actual fill price for SL/TP levels — more accurate than Yahoo estimate
       const fillPrice = Number(result?.openPrice ?? result?.OpenPrice ?? usePrice) || usePrice;
 
       if (ticket && !String(ticket).includes('error') && !String(ticket).includes('Error') && !String(ticket).includes('message')) {
-        // Recompute SL/TP against the real fill price, then attach via OrderModify
-        let finalSl = trade.direction === 'buy'
+        // SL/TP: broker strips these so we save them to Supabase.
+        // /api/trades/monitor runs each cycle and closes positions when price hits these levels.
+        const finalSl = trade.direction === 'buy'
           ? +(fillPrice - slPts * ptSize).toFixed(5)
           : +(fillPrice + slPts * ptSize).toFixed(5);
-        let finalTp = trade.direction === 'buy'
+        const finalTp = trade.direction === 'buy'
           ? +(fillPrice + slPts * ptSize * 2).toFixed(5)
           : +(fillPrice - slPts * ptSize * 2).toFixed(5);
-
-        let modifyResult = await modifyStops(token, ticket, finalSl, finalTp);
-        const modifyFailed = (modifyResult?.error || modifyResult?.message || /invalid/i.test(JSON.stringify(modifyResult ?? {})));
-        if (modifyFailed) {
-          // Retry once with a wider stop distance in case the broker's minimum stop distance
-          // was the rejection reason
-          finalSl = trade.direction === 'buy'
-            ? +(fillPrice - slPts * ptSize * 3).toFixed(5)
-            : +(fillPrice + slPts * ptSize * 3).toFixed(5);
-          finalTp = trade.direction === 'buy'
-            ? +(fillPrice + slPts * ptSize * 5).toFixed(5)
-            : +(fillPrice - slPts * ptSize * 5).toFixed(5);
-          modifyResult = await modifyStops(token, ticket, finalSl, finalTp);
-        }
 
         await sb.from('trades').insert({
           symbol: trade.symbol,
@@ -257,7 +229,7 @@ export async function POST(req: NextRequest) {
           risk_percent: riskPct * 100,
           result: 'open',
           opened_at: new Date().toISOString(),
-          notes: `Agent execution | Score: ${trade.setup_score} | ${trade.primary_reason ?? ''} | Ticket: ${String(ticket)} | MT5: ${usedSymbol}${modifyResult?.error ? ' | SL/TP modify failed: ' + JSON.stringify(modifyResult) : ''}`,
+          notes: `Agent execution | Score: ${trade.setup_score} | ${trade.primary_reason ?? ''} | Ticket: ${String(ticket)} | MT5: ${usedSymbol} | SL/TP client-side @ ${finalSl}/${finalTp}`,
         });
 
         executed.push({
@@ -270,7 +242,7 @@ export async function POST(req: NextRequest) {
           tp: finalTp,
           ticket: String(ticket),
           score: trade.setup_score,
-          slTpAttached: !modifyFailed || !modifyResult?.error,
+          slTpMode: 'client-side',
         });
       } else {
         failed.push({ symbol: trade.symbol, reason: `MT5 rejected: ${JSON.stringify(result)}` });
@@ -281,12 +253,11 @@ export async function POST(req: NextRequest) {
   }
 
   // Update executor agent status
-  const slTpIssues = executed.filter(e => !e.slTpAttached);
   await sb.from('agent_status').upsert({
     agent: 'executor',
     status: 'running',
     last_action: executed.length
-      ? `Executed ${executed.length} trade(s): ${executed.map(e => `${e.direction.toUpperCase()} ${e.symbol}`).join(', ')}${slTpIssues.length ? ` ⚠ SL/TP failed on ${slTpIssues.length}` : ''}`
+      ? `✓ ${executed.length} trade(s) executed — ${executed.map(e => `${e.direction.toUpperCase()} ${e.symbol}`).join(', ')} | SL/TP client-side`
       : failed.length ? `${failed.length} trade(s) failed: ${failed[0]?.reason}` : 'No trades to execute',
     data: JSON.stringify({ executed, failed, balance, last_run: new Date().toISOString() }),
     updated_at: new Date().toISOString(),
