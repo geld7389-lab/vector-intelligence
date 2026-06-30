@@ -55,6 +55,34 @@ export async function GET(req: Request) {
     return Response.json({ total: parsed ? Object.keys(parsed).length : 0, oilLike, sampleKeys: parsed ? Object.keys(parsed).slice(0, 30) : [] });
   }
 
+  if (action === 'sltp') {
+    // Try every known MT5 REST endpoint for setting SL/TP on an open position
+    const ticket = searchParams.get('ticket') ?? '59201089';
+    const sl = searchParams.get('sl') ?? '1510';
+    const tp = searchParams.get('tp') ?? '1620';
+    const results: Record<string, any> = {};
+
+    const endpoints = [
+      `PositionModify?id=${token}&ticket=${ticket}&sl=${sl}&tp=${tp}`,
+      `OrderSendNew?id=${token}&ticket=${ticket}&sl=${sl}&tp=${tp}&action=SL_TP`,
+      `SetSLTP?id=${token}&ticket=${ticket}&sl=${sl}&tp=${tp}`,
+      `ModifyPosition?id=${token}&ticket=${ticket}&sl=${sl}&tp=${tp}`,
+      `OrderModifyPosition?id=${token}&ticket=${ticket}&sl=${sl}&tp=${tp}`,
+      `TradeTransaction?id=${token}&ticket=${ticket}&sl=${sl}&tp=${tp}&action=TRADE_ACTION_SLTP`,
+    ];
+
+    for (const ep of endpoints) {
+      try {
+        const r = await fetch(`${BASE}/${ep}`, { headers: { accept: 'text/json' }, signal: AbortSignal.timeout(6000) });
+        const text = await r.text();
+        results[ep.split('?')[0]] = { status: r.status, raw: text.slice(0, 200) };
+      } catch (e: any) {
+        results[ep.split('?')[0]] = { error: e.message };
+      }
+    }
+    return Response.json({ token, results });
+  }
+
   if (action === 'modify') {
     const ticket = searchParams.get('ticket');
     const sl = searchParams.get('sl');
