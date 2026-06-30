@@ -1268,7 +1268,12 @@ function AgentsTab() {
       // Try localStorage first (fast)
       const saved = localStorage.getItem('mt5_token');
       const broker = localStorage.getItem('mt5_broker');
-      if (saved) { setMt5Token(saved); if (broker) setMt5BrokerName(broker); return; }
+      if (saved) {
+        setMt5Token(saved);
+        if (broker) setMt5BrokerName(broker);
+        loadMt5Accounts(saved); // fixes: panel stayed blank on refresh because account data was never fetched
+        return;
+      }
       // Fallback: load from Supabase (survives deploys/browser clears)
       try {
         const r = await fetch('/api/agents/status');
@@ -1279,10 +1284,12 @@ function AgentsTab() {
           setMt5BrokerName(mt5.data.broker ?? '');
           localStorage.setItem('mt5_token', mt5.data.token);
           localStorage.setItem('mt5_broker', mt5.data.broker ?? '');
+          loadMt5Accounts(mt5.data.token);
         }
       } catch {}
     };
     loadToken();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const loadMt5Accounts = React.useCallback(async (token?: string) => {
