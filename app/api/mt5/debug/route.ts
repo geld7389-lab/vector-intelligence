@@ -39,7 +39,7 @@ export async function GET(req: Request) {
   if (!token) return Response.json({ error: 'token or password required' });
 
   if (action === 'raw_positions') {
-    const r = await fetch(`${BASE}/Positions?id=${token}`, { headers: { accept: 'text/json' }, signal: AbortSignal.timeout(10000) });
+    const r = await fetch(`${BASE}/OpenedOrders?id=${token}`, { headers: { accept: 'text/json' }, signal: AbortSignal.timeout(10000) });
     const text = await r.text();
     return Response.json({ status: r.status, raw: text });
   }

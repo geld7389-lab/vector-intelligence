@@ -11,7 +11,7 @@ export async function GET(req: Request) {
   try {
     const [accountRes, posRes, ordersRes] = await Promise.all([
       fetch(`${BASE}/AccountSummary?id=${token}`, { headers: { accept: 'text/json' }, signal: AbortSignal.timeout(8000) }),
-      fetch(`${BASE}/Positions?id=${token}`, { headers: { accept: 'text/json' }, signal: AbortSignal.timeout(8000) }),
+      fetch(`${BASE}/OpenedOrders?id=${token}`, { headers: { accept: 'text/json' }, signal: AbortSignal.timeout(8000) }),
       fetch(`${BASE}/PendingOrders?id=${token}`, { headers: { accept: 'text/json' }, signal: AbortSignal.timeout(8000) }),
     ]);
 
