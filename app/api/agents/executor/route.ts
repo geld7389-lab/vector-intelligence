@@ -10,7 +10,7 @@ const MT5_SYMBOL_MAP: Record<string, string> = {
   NQ: 'US100.',
   ES: 'US500.',
   GC: 'XAUUSD.',
-  CL: 'USOIL.',
+  CL: 'USOIL.c',
   BTC: 'BTCUSD.',
   ETH: 'ETHUSD.',
   EURUSD: 'EURUSD.',
