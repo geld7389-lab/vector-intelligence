@@ -1504,7 +1504,7 @@ function AgentsTab() {
       {/* APPROVED TRADES */}
       {(data?.approved_trades?.length ?? 0) > 0 && (
         <div className="rounded-xl border border-emerald-800/40 bg-emerald-900/10 p-4">
-          <div className="text-[10px] text-emerald-600 uppercase tracking-wider mb-3">✓ AI-Approved Setups (Score ≥8)</div>
+          <div className="text-[10px] text-emerald-600 uppercase tracking-wider mb-3">✓ AI-Approved Setups (Score ≥7)</div>
           <div className="space-y-3">
             {data.approved_trades.map((t: any, i: number) => (
               <div key={i} className="rounded-lg border border-zinc-800 bg-zinc-950 p-3 text-xs space-y-1">
