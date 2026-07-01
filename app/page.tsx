@@ -1447,7 +1447,7 @@ function AgentsTab() {
       <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
         <div>
           <div className="text-sm font-semibold text-zinc-200">AI Agent Cycle</div>
-          <div className="text-xs text-zinc-600 mt-0.5">Runs all 10 agents: scans 9 markets, scores setups with Groq AI, checks risk</div>
+          <div className="text-xs text-zinc-600 mt-0.5">Runs all 11 agents: scans 9 markets, scores setups with Groq AI, checks risk</div>
           <div className="text-[10px] text-zinc-700 mt-1">Last run: {lastRun}</div>
         </div>
         <button
