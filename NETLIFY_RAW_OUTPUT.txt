@@ -36,131 +36,58 @@ $ npm run build
   - Environments: .env.local
 
    Creating an optimized production build ...
- ✓ Compiled successfully
-   Linting and checking validity of types ...
-   Collecting page data ...
- ⚠ Using edge runtime on a page currently disables static generation for that page
-   Generating static pages (0/7) ...
-   Generating static pages (1/7) 
-   Generating static pages (3/7) 
-   Generating static pages (5/7) 
- ✓ Generating static pages (7/7)
-   Finalizing page optimization ...
-   Collecting build traces ...
+Failed to compile.
 
-Route (app)                              Size     First Load JS
-┌ ○ /                                    82.7 kB         170 kB
-├ ○ /_not-found                          871 B          87.9 kB
-├ ƒ /api/agents/ai-brain                 0 B                0 B
-├ ƒ /api/agents/alerts                   0 B                0 B
-├ ƒ /api/agents/executor                 0 B                0 B
-├ ƒ /api/agents/macro                    0 B                0 B
-├ ƒ /api/agents/market-structure         0 B                0 B
-├ ƒ /api/agents/orchestrator             0 B                0 B
-├ ƒ /api/agents/risk                     0 B                0 B
-├ ƒ /api/agents/run                      0 B                0 B
-├ ƒ /api/agents/self-learning            0 B                0 B
-├ ƒ /api/agents/smc                      0 B                0 B
-├ ƒ /api/agents/status                   0 B                0 B
-├ ƒ /api/agents/technical                0 B                0 B
-├ ƒ /api/analytics                       0 B                0 B
-├ ƒ /api/analyze                         0 B                0 B
-├ ƒ /api/autoscan                        0 B                0 B
-├ ƒ /api/backtest                        0 B                0 B
-├ ƒ /api/calendar                        0 B                0 B
-├ ƒ /api/candles                         0 B                0 B
-├ ƒ /api/cot                             0 B                0 B
-├ ƒ /api/crypto                          0 B                0 B
-├ ƒ /api/deepbacktest                    0 B                0 B
-├ ƒ /api/drawings                        0 B                0 B
-├ ƒ /api/forex                           0 B                0 B
-├ ƒ /api/health                          0 B                0 B
-├ ƒ /api/killzone                        0 B                0 B
-├ ƒ /api/knowledge                       0 B                0 B
-├ ƒ /api/market                          0 B                0 B
-├ ƒ /api/migrate                         0 B                0 B
-├ ƒ /api/monitor                         0 B                0 B
-├ ƒ /api/mt5/account                     0 B                0 B
-├ ƒ /api/mt5/connect                     0 B                0 B
-├ ƒ /api/mt5/debug                       0 B                0 B
-├ ƒ /api/mt5/register                    0 B                0 B
-├ ƒ /api/mt5/status                      0 B                0 B
-├ ƒ /api/mt5/trade                       0 B                0 B
-├ ƒ /api/news                            0 B                0 B
-├ ƒ /api/newsfeed                        0 B                0 B
-├ ƒ /api/prices                          0 B                0 B
-├ ƒ /api/scanner                         0 B                0 B
-├ ƒ /api/setups                          0 B                0 B
-├ ƒ /api/setups/monitor                  0 B                0 B
-├ ƒ /api/smt                             0 B                0 B
-├ ƒ /api/stocks                          0 B                0 B
-├ ƒ /api/telegram                        0 B                0 B
-├ ƒ /api/trades                          0 B                0 B
-├ ƒ /api/trades/monitor                  0 B                0 B
-├ ƒ /api/transcribe                      0 B                0 B
-├ ƒ /api/tv-webhook                      0 B                0 B
-└ ƒ /api/weekbias                        0 B                0 B
-+ First Load JS shared by all            87 kB
-  ├ chunks/23-804d28d9b4a41ed3.js        31.5 kB
-  ├ chunks/fd9d1056-2821b0f0cabcd8bd.js  53.6 kB
-  └ other shared chunks (total)          1.92 kB
+./app/api/agents/orchestrator/route.ts
+Error: 
+  [31mx[0m Return statement is not allowed here
+     ,-[[36;1;4m/home/runner/work/vector-intelligence/vector-intelligence/app/api/agents/orchestrator/route.ts[0m:158:1]
+ [2m158[0m |       await saveAgentStatus('orchestrator', 'running',
+ [2m159[0m |         `Cycle complete in ${elapsed}s — ${brainResult?.approved?.length ?? 0} approved, ${executedCount} executed on MT5`);
+ [2m160[0m |     
+ [2m161[0m | [31;1m,[0m[31;1m-[0m[31;1m>[0m   return NextResponse.json({
+ [2m162[0m | [31;1m|[0m       ok: true,
+ [2m163[0m | [31;1m|[0m       elapsed_s: parseFloat(elapsed),
+ [2m164[0m | [31;1m|[0m       symbols_scanned: symbols.length,
+ [2m165[0m | [31;1m|[0m       approved_trades: brainResult?.approved?.length ?? 0,
+ [2m166[0m | [31;1m|[0m       executed_trades: execResult?.trades_executed ?? 0,
+ [2m167[0m | [31;1m|[0m       results,
+ [2m168[0m | [31;1m`[0m[31;1m-[0m[31;1m>[0m   });
+ [2m169[0m |     }
+ [2m170[0m |     
+ [2m171[0m |     export async function GET() {
+     `----
+
+  [31mx[0m Expression expected
+     ,-[[36;1;4m/home/runner/work/vector-intelligence/vector-intelligence/app/api/agents/orchestrator/route.ts[0m:166:1]
+ [2m166[0m |     executed_trades: execResult?.trades_executed ?? 0,
+ [2m167[0m |     results,
+ [2m168[0m |   });
+ [2m169[0m | }
+     : [31;1m^[0m
+ [2m170[0m | 
+ [2m171[0m | export async function GET() {
+ [2m172[0m |   const { data } = await sb.from('agent_status').select('*').order('agent');
+     `----
+
+Caused by:
+    Syntax Error
+
+Import trace for requested module:
+./app/api/agents/orchestrator/route.ts
 
 
-○  (Static)   prerendered as static content
-ƒ  (Dynamic)  server-rendered on demand
-
+> Build failed because of webpack errors
 ​
-(build.command completed in 29.7s)
-​
-Functions bundling                                            
-────────────────────────────────────────────────────────────────
-​
-Packaging Functions from .netlify/functions-internal directory:
- - ___netlify-server-handler/___netlify-server-handler.mjs
-​
-​
-(Functions bundling completed in 1.2s)
-Deploy path:        /home/runner/work/vector-intelligence/vector-intelligence/.next
-Configuration path: /home/runner/work/vector-intelligence/vector-intelligence/netlify.toml
-Deploying to main site URL...
- ›   Warning: JSONHTTPError:  403
- ›   Warning: 
-{
-  "name": "JSONHTTPError",
-  "status": 403,
-  "json": {
-    "error": "Account credit usage exceeded - new deploys are blocked until credits are added"
-  }
-}
-
-​
-Internal error during "options.onPostBuild"                   
+"build.command" failed                                        
 ────────────────────────────────────────────────────────────────
 ​
   Error message
-  JSONHTTPError: Forbidden
+  Command failed with exit code 1: npm run build
 ​
   Error location
-  During options.onPostBuild
-      at parseResponse (file:///opt/hostedtoolcache/node/20.20.2/x64/lib/node_modules/netlify-cli/node_modules/netlify/lib/methods/response.js:10:39)
-      at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
-      at async callMethod (file:///opt/hostedtoolcache/node/20.20.2/x64/lib/node_modules/netlify-cli/node_modules/netlify/lib/methods/index.js:26:28)
-      at async runDeploy (file:///opt/hostedtoolcache/node/20.20.2/x64/lib/node_modules/netlify-cli/dist/commands/deploy/deploy.js:356:19)
-      at async prepAndRunDeploy (file:///opt/hostedtoolcache/node/20.20.2/x64/lib/node_modules/netlify-cli/dist/commands/deploy/deploy.js:603:21)
-      at async deployHandler (file:///opt/hostedtoolcache/node/20.20.2/x64/lib/node_modules/netlify-cli/dist/commands/deploy/deploy.js:688:27)
-      at async fireCoreStep (file:///opt/hostedtoolcache/node/20.20.2/x64/lib/node_modules/netlify-cli/node_modules/@netlify/build/lib/steps/core_step.js:11:98)
-      at async tFireStep (file:///opt/hostedtoolcache/node/20.20.2/x64/lib/node_modules/netlify-cli/node_modules/@netlify/build/lib/time/main.js:18:63)
-      at async file:///opt/hostedtoolcache/node/20.20.2/x64/lib/node_modules/netlify-cli/node_modules/@netlify/build/lib/steps/run_step.js:69:283
-      at async pReduce.index (file:///opt/hostedtoolcache/node/20.20.2/x64/lib/node_modules/netlify-cli/node_modules/@netlify/build/lib/steps/run_steps.js:12:349)
-​
-  Error properties
-  {
-    name: [32m'JSONHTTPError'[39m,
-    status: [33m403[39m,
-    json: {
-      error: [32m'Account credit usage exceeded - new deploys are blocked until credits are added'[39m
-    }
-  }
+  In build.command from netlify.toml:
+  npm run build
 ​
   Resolved config
   build:
@@ -177,28 +104,7 @@ Internal error during "options.onPostBuild"
   functions:
     '*':
       node_bundler: esbuild
-  headers:
-    - for: /_next/static/*
-      values:
-        Cache-Control: public, max-age=31536000, immutable
-  headersOrigin: inline
   plugins:
     - inputs: {}
       origin: config
       package: '@netlify/plugin-nextjs'
-  redirects:
-    - from: /_next/image
-      query:
-        q: ':quality'
-        url: ':url'
-        w: ':width'
-      status: 200
-      to: /.netlify/images?url=:url&w=:width&q=:quality
-    - from: /_ipx/*
-      query:
-        q: ':quality'
-        url: ':url'
-        w: ':width'
-      status: 200
-      to: /.netlify/images?url=:url&w=:width&q=:quality
-  redirectsOrigin: inline
