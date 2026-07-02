@@ -1296,20 +1296,25 @@ function AgentsTab() {
     const t = token ?? mt5Token;
     setMt5Loading(true); setMt5Error(null);
     try {
-      // If no token, try to auto-reconnect using saved credentials from Supabase
       let useToken = t;
+      // No token at all — try pulling from Supabase
       if (!useToken) {
         const sr = await fetch('/api/agents/status');
         const sd = await sr.json();
         const sess = sd.agents?.mt5_session?.data;
-        if (sess?.token) useToken = sess.token;
+        if (sess?.token) { useToken = sess.token; }
       }
       if (!useToken) { setMt5Loading(false); return; }
 
       const r = await fetch(`/api/mt5/account?token=${useToken}`);
       const d = await r.json();
-      if (d.account?.error || !d.connected) {
-        // Token expired — auto-reconnect using saved credentials
+
+      if (d.connected) {
+        // Happy path — server confirmed connected, just display the data
+        setMt5Token(useToken);
+        setMt5AccountInfo(d);
+      } else {
+        // Token expired — auto-reconnect using saved credentials from Supabase
         const sr = await fetch('/api/agents/status');
         const sd = await sr.json();
         const sess = sd.agents?.mt5_session?.data;
@@ -1323,25 +1328,22 @@ function AgentsTab() {
           if (cd.success && cd.token) {
             setMt5Token(cd.token);
             localStorage.setItem('mt5_token', cd.token);
-            // Save new token
             await fetch('/api/agents/status', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ agent: 'mt5_session', token: cd.token, broker: sess.broker, login: sess.login, password: sess.password, server: sess.server }),
             });
-            // Reload with new token
             const r2 = await fetch(`/api/mt5/account?token=${cd.token}`);
             const d2 = await r2.json();
             if (d2.connected) setMt5AccountInfo(d2);
+          } else {
+            setMt5Error('Auto-reconnect failed. Please reconnect manually.');
           }
         } else {
           setMt5Error('Session expired. Please reconnect.');
           setMt5Token(null);
           localStorage.removeItem('mt5_token');
         }
-      } else {
-        setMt5Token(useToken);
-        setMt5AccountInfo(d);
       }
     } catch(e: any) { setMt5Error(e.message); }
     setMt5Loading(false);
@@ -1717,11 +1719,11 @@ function AgentsTab() {
                       </div>
                       <div className="space-y-1">
                         {[...(mt5AccountInfo.positions ?? []), ...(mt5AccountInfo.orders ?? [])].slice(0,8).map((p: any, i: number) => {
-                          const isBuy = p.Type===0 || p.type===0 || p.orderType==='Buy' || p.action==='buy';
-                          const sym = p.Symbol ?? p.symbol ?? p.Instrument ?? '—';
-                          const lots = p.Volume !== undefined ? (p.Volume/100000).toFixed(2) : (p.lots ?? p.volume ?? 0);
-                          const opPrice = p.PriceOpen ?? p.openPrice ?? p.OpenPrice ?? p.Price ?? 0;
-                          const profit = p.Profit ?? p.profit ?? 0;
+                          const isBuy = p.orderType==='Buy' || p.orderType==='DealBuy' || p.Type===0 || p.type===0 || p.action==='buy';
+                          const sym = (p.symbol ?? p.Symbol ?? p.Instrument ?? '—').replace(/\.$/, '');
+                          const lots = p.lots ?? (p.Volume !== undefined ? p.Volume/100000 : 0);
+                          const opPrice = p.openPrice ?? p.PriceOpen ?? p.OpenPrice ?? p.Price ?? 0;
+                          const profit = p.profit ?? p.Profit ?? 0;
                           return (
                             <div key={i} className="flex items-center justify-between text-[11px] py-1 border-b border-zinc-800">
                               <div className="flex items-center gap-2">

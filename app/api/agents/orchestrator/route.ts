@@ -42,10 +42,26 @@ export async function POST(req: NextRequest) {
 
   // 0. Position Monitor — client-side SL/TP enforcement (broker strips stops on this account)
   // Runs FIRST so closed positions are reflected in risk before new trades are considered.
-  const monitorResult = await callAgent('trades/monitor', {}, 25000);
+  // NOTE: uses full path because monitor is at /api/trades/monitor, NOT /api/agents/trades/monitor
+  let monitorResult: any = null;
+  try {
+    const monRes = await fetch(`${BASE}/api/trades/monitor`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+      signal: AbortSignal.timeout(25000),
+    });
+    monitorResult = await monRes.json();
+  } catch {}
   if (monitorResult?.closed?.length) {
     await saveAgentStatus('position_monitor', 'running',
       `Closed ${monitorResult.closed.length}: ${monitorResult.closed.map((c:any)=>`${c.symbol} ${c.reason}`).join(', ')}`);
+  } else {
+    await saveAgentStatus('position_monitor', 'running',
+      monitorResult?.checked > 0
+        ? `Watching ${monitorResult.checked} open position(s) — no stops hit`
+        : monitorResult?.skipped ?? 'No open positions to monitor');
+  }
   }
 
   // 1. Market Structure
