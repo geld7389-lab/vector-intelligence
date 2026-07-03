@@ -1510,7 +1510,44 @@ function AgentsTab() {
         )}
       </div>
 
-      {/* APPROVED TRADES */}
+      {/* ACTIVE TRADES — real executed positions with entry/SL/TP charted */}
+      {(() => {
+        const monitorWatching = getAgent('position_monitor')?.data?.watching ?? [];
+        const justExecuted = getAgent('executor')?.data?.executed ?? [];
+        // Merge, de-dupe by ticket, prefer monitor's live currentPrice when available
+        const byTicket: Record<string, any> = {};
+        for (const t of justExecuted) byTicket[t.ticket] = { ...t };
+        for (const w of monitorWatching) byTicket[w.ticket] = { ...byTicket[w.ticket], ...w };
+        const activeTrades = Object.values(byTicket);
+        if (!activeTrades.length) return null;
+        return (
+          <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4">
+            <div className="text-[10px] text-zinc-600 uppercase tracking-wider mb-3">Active Trades — Entry / SL / TP</div>
+            <div className="space-y-4">
+              {activeTrades.map((t: any, i: number) => (
+                <div key={t.ticket ?? i} className="rounded-lg border border-zinc-800 bg-zinc-950 p-3">
+                  <div className="flex items-center gap-2 mb-1 text-xs">
+                    <span className="font-bold text-zinc-100">{t.symbol}</span>
+                    <span className={cx('px-2 py-0.5 rounded text-[10px] font-bold', t.direction==='buy'?'bg-emerald-900/60 text-emerald-400':'bg-red-900/60 text-red-400')}>
+                      {t.direction?.toUpperCase()}
+                    </span>
+                    {t.ticket && <span className="text-zinc-600 font-mono">#{t.ticket}</span>}
+                    {t.currentPrice != null && <span className="text-zinc-500 ml-auto">now {t.currentPrice}</span>}
+                  </div>
+                  <CandleChart
+                    symbol={t.symbol}
+                    timeframe="15m"
+                    entry_low={t.entry}
+                    entry_high={t.entry}
+                    stop_loss={t.sl}
+                    target={t.tp}
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
       {(data?.approved_trades?.length ?? 0) > 0 && (
         <div className="rounded-xl border border-emerald-800/40 bg-emerald-900/10 p-4">
           <div className="text-[10px] text-emerald-600 uppercase tracking-wider mb-3">✓ AI-Approved Setups (Score ≥7)</div>

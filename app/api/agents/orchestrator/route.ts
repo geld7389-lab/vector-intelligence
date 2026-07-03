@@ -43,6 +43,9 @@ export async function POST(req: NextRequest) {
   // 0. Position Monitor — client-side SL/TP enforcement (broker strips stops on this account)
   // Runs FIRST so closed positions are reflected in risk before new trades are considered.
   // NOTE: uses full path because monitor is at /api/trades/monitor, NOT /api/agents/trades/monitor
+  // NOTE: monitor route saves its own detailed agent_status (with watching[] data) — do NOT
+  // call saveAgentStatus('position_monitor', ...) here again, it was silently overwriting
+  // that detailed status with data:null on every single cycle.
   let monitorResult: any = null;
   try {
     const monRes = await fetch(`${BASE}/api/trades/monitor`, {
@@ -54,17 +57,8 @@ export async function POST(req: NextRequest) {
     monitorResult = await monRes.json();
   } catch (e: any) {
     monitorResult = { ok: false, error: 'fetch_failed: ' + e.message };
-  }
-  if (monitorResult?.error) {
+    // Only write here if the monitor route itself never ran (network/fetch failure)
     await saveAgentStatus('position_monitor', 'running', `⚠ Error: ${monitorResult.error}`);
-  } else if (monitorResult?.closed?.length) {
-    await saveAgentStatus('position_monitor', 'running',
-      `Closed ${monitorResult.closed.length}: ${monitorResult.closed.map((c:any)=>`${c.symbol} ${c.reason}`).join(', ')}`);
-  } else {
-    await saveAgentStatus('position_monitor', 'running',
-      monitorResult?.checked > 0
-        ? `Watching ${monitorResult.checked} open position(s) — no stops hit`
-        : monitorResult?.skipped ?? 'No open positions to monitor');
   }
 
   // 1. Market Structure
