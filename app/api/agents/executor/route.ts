@@ -226,10 +226,9 @@ export async function POST(req: NextRequest) {
           entry_price: fillPrice,
           stop_loss: finalSl,
           take_profit: finalTp,
-          risk_percent: riskPct * 100,
           result: 'open',
           opened_at: new Date().toISOString(),
-          notes: `Agent execution | Score: ${trade.setup_score} | ${trade.primary_reason ?? ''} | Ticket: ${String(ticket)} | MT5: ${usedSymbol} | SL/TP client-side @ ${finalSl}/${finalTp}`,
+          notes: `Agent execution | Score: ${trade.setup_score} | Risk: ${(riskPct * 100).toFixed(1)}% | ${trade.primary_reason ?? ''} | Ticket: ${String(ticket)} | MT5: ${usedSymbol} | SL/TP client-side @ ${finalSl}/${finalTp}`,
         });
         const dbError = insertRes?.error?.message ?? null;
 
