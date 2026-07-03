@@ -68,6 +68,7 @@ export async function POST() {
     if (!openTrades?.length) return NextResponse.json({ ok: true, checked: 0, closed: [] });
 
     const closed: any[] = [];
+    const watching: any[] = [];
     const errors: any[] = [];
 
     for (const trade of openTrades) {
@@ -91,8 +92,8 @@ export async function POST() {
         const closeResult = await closePosition(token, ticket);
         const closePrice = closeResult?.closePrice || currentPrice;
         const profit = isLong
-          ? (closePrice - Number(trade.entry_price)) * (trade.risk_percent / 100)
-          : (Number(trade.entry_price) - closePrice) * (trade.risk_percent / 100);
+          ? (closePrice - Number(trade.entry_price))
+          : (Number(trade.entry_price) - closePrice);
 
         // Update trade record in Supabase
         await sb.from('trades').update({
@@ -110,6 +111,15 @@ export async function POST() {
           sl, tp,
           currentPrice,
         });
+      } else {
+        watching.push({
+          symbol: trade.symbol,
+          ticket,
+          direction: trade.direction,
+          entry: Number(trade.entry_price),
+          sl, tp,
+          currentPrice,
+        });
       }
     }
 
@@ -119,12 +129,14 @@ export async function POST() {
       status: 'running',
       last_action: closed.length
         ? `Closed ${closed.length} position(s): ${closed.map(c => `${c.symbol} (${c.reason})`).join(', ')}`
-        : `Monitored ${openTrades.length} open position(s) — no stops hit`,
-      data: JSON.stringify({ checked: openTrades.length, closed, last_run: new Date().toISOString() }),
+        : watching.length
+          ? `Watching: ${watching.map(w => `${w.symbol} ${w.direction.toUpperCase()} entry ${w.entry} SL ${w.sl} TP ${w.tp} (now ${w.currentPrice})`).join(' | ')}`
+          : 'No open positions to monitor',
+      data: JSON.stringify({ checked: openTrades.length, closed, watching, last_run: new Date().toISOString() }),
       updated_at: new Date().toISOString(),
     }, { onConflict: 'agent' });
 
-    return NextResponse.json({ ok: true, checked: openTrades.length, closed, errors });
+    return NextResponse.json({ ok: true, checked: openTrades.length, closed, watching, errors });
   } catch (e: any) {
     return NextResponse.json({ ok: false, error: e.message }, { status: 500 });
   }

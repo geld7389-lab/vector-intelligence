@@ -258,7 +258,7 @@ export async function POST(req: NextRequest) {
     agent: 'executor',
     status: 'running',
     last_action: executed.length
-      ? `✓ ${executed.length} trade(s) executed — ${executed.map(e => `${e.direction.toUpperCase()} ${e.symbol}`).join(', ')} | SL/TP client-side`
+      ? `✓ ${executed.length} trade(s): ${executed.map(e => `${e.direction.toUpperCase()} ${e.symbol} @ ${e.entry} | SL ${e.sl} / TP ${e.tp}`).join('  |  ')}`
       : failed.length ? `${failed.length} trade(s) failed: ${failed[0]?.reason}` : 'No trades to execute',
     data: JSON.stringify({ executed, failed, balance, last_run: new Date().toISOString() }),
     updated_at: new Date().toISOString(),
