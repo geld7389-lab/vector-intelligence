@@ -220,7 +220,7 @@ export async function POST(req: NextRequest) {
           ? +(fillPrice + slPts * ptSize * 2).toFixed(5)
           : +(fillPrice - slPts * ptSize * 2).toFixed(5);
 
-        await sb.from('trades').insert({
+        const insertRes = await sb.from('trades').insert({
           symbol: trade.symbol,
           direction: trade.direction === 'buy' ? 'long' : 'short',
           entry_price: fillPrice,
@@ -231,6 +231,7 @@ export async function POST(req: NextRequest) {
           opened_at: new Date().toISOString(),
           notes: `Agent execution | Score: ${trade.setup_score} | ${trade.primary_reason ?? ''} | Ticket: ${String(ticket)} | MT5: ${usedSymbol} | SL/TP client-side @ ${finalSl}/${finalTp}`,
         });
+        const dbError = insertRes?.error?.message ?? null;
 
         executed.push({
           symbol: trade.symbol,
@@ -243,6 +244,7 @@ export async function POST(req: NextRequest) {
           ticket: String(ticket),
           score: trade.setup_score,
           slTpMode: 'client-side',
+          dbError,
         });
       } else {
         failed.push({ symbol: trade.symbol, reason: `MT5 rejected: ${JSON.stringify(result)}` });
