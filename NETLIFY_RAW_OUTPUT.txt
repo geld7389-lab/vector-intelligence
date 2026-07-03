@@ -36,75 +36,154 @@ $ npm run build
   - Environments: .env.local
 
    Creating an optimized production build ...
-Failed to compile.
+ ✓ Compiled successfully
+   Linting and checking validity of types ...
+   Collecting page data ...
+ ⚠ Using edge runtime on a page currently disables static generation for that page
+   Generating static pages (0/7) ...
+   Generating static pages (1/7) 
+   Generating static pages (3/7) 
+   Generating static pages (5/7) 
+ ✓ Generating static pages (7/7)
+   Finalizing page optimization ...
+   Collecting build traces ...
 
-./app/api/agents/orchestrator/route.ts
-Error: 
-  [31mx[0m Return statement is not allowed here
-     ,-[[36;1;4m/home/runner/work/vector-intelligence/vector-intelligence/app/api/agents/orchestrator/route.ts[0m:158:1]
- [2m158[0m |       await saveAgentStatus('orchestrator', 'running',
- [2m159[0m |         `Cycle complete in ${elapsed}s — ${brainResult?.approved?.length ?? 0} approved, ${executedCount} executed on MT5`);
- [2m160[0m |     
- [2m161[0m | [31;1m,[0m[31;1m-[0m[31;1m>[0m   return NextResponse.json({
- [2m162[0m | [31;1m|[0m       ok: true,
- [2m163[0m | [31;1m|[0m       elapsed_s: parseFloat(elapsed),
- [2m164[0m | [31;1m|[0m       symbols_scanned: symbols.length,
- [2m165[0m | [31;1m|[0m       approved_trades: brainResult?.approved?.length ?? 0,
- [2m166[0m | [31;1m|[0m       executed_trades: execResult?.trades_executed ?? 0,
- [2m167[0m | [31;1m|[0m       results,
- [2m168[0m | [31;1m`[0m[31;1m-[0m[31;1m>[0m   });
- [2m169[0m |     }
- [2m170[0m |     
- [2m171[0m |     export async function GET() {
-     `----
+Route (app)                              Size     First Load JS
+┌ ○ /                                    82.8 kB         170 kB
+├ ○ /_not-found                          871 B          87.9 kB
+├ ƒ /api/agents/ai-brain                 0 B                0 B
+├ ƒ /api/agents/alerts                   0 B                0 B
+├ ƒ /api/agents/executor                 0 B                0 B
+├ ƒ /api/agents/macro                    0 B                0 B
+├ ƒ /api/agents/market-structure         0 B                0 B
+├ ƒ /api/agents/orchestrator             0 B                0 B
+├ ƒ /api/agents/risk                     0 B                0 B
+├ ƒ /api/agents/run                      0 B                0 B
+├ ƒ /api/agents/self-learning            0 B                0 B
+├ ƒ /api/agents/smc                      0 B                0 B
+├ ƒ /api/agents/status                   0 B                0 B
+├ ƒ /api/agents/technical                0 B                0 B
+├ ƒ /api/analytics                       0 B                0 B
+├ ƒ /api/analyze                         0 B                0 B
+├ ƒ /api/autoscan                        0 B                0 B
+├ ƒ /api/backtest                        0 B                0 B
+├ ƒ /api/calendar                        0 B                0 B
+├ ƒ /api/candles                         0 B                0 B
+├ ƒ /api/cot                             0 B                0 B
+├ ƒ /api/crypto                          0 B                0 B
+├ ƒ /api/deepbacktest                    0 B                0 B
+├ ƒ /api/drawings                        0 B                0 B
+├ ƒ /api/forex                           0 B                0 B
+├ ƒ /api/health                          0 B                0 B
+├ ƒ /api/killzone                        0 B                0 B
+├ ƒ /api/knowledge                       0 B                0 B
+├ ƒ /api/market                          0 B                0 B
+├ ƒ /api/migrate                         0 B                0 B
+├ ƒ /api/monitor                         0 B                0 B
+├ ƒ /api/mt5/account                     0 B                0 B
+├ ƒ /api/mt5/connect                     0 B                0 B
+├ ƒ /api/mt5/debug                       0 B                0 B
+├ ƒ /api/mt5/register                    0 B                0 B
+├ ƒ /api/mt5/status                      0 B                0 B
+├ ƒ /api/mt5/trade                       0 B                0 B
+├ ƒ /api/news                            0 B                0 B
+├ ƒ /api/newsfeed                        0 B                0 B
+├ ƒ /api/prices                          0 B                0 B
+├ ƒ /api/scanner                         0 B                0 B
+├ ƒ /api/setups                          0 B                0 B
+├ ƒ /api/setups/monitor                  0 B                0 B
+├ ƒ /api/smt                             0 B                0 B
+├ ƒ /api/stocks                          0 B                0 B
+├ ƒ /api/telegram                        0 B                0 B
+├ ƒ /api/trades                          0 B                0 B
+├ ƒ /api/trades/monitor                  0 B                0 B
+├ ƒ /api/transcribe                      0 B                0 B
+├ ƒ /api/tv-webhook                      0 B                0 B
+└ ƒ /api/weekbias                        0 B                0 B
++ First Load JS shared by all            87 kB
+  ├ chunks/23-804d28d9b4a41ed3.js        31.5 kB
+  ├ chunks/fd9d1056-2821b0f0cabcd8bd.js  53.6 kB
+  └ other shared chunks (total)          1.92 kB
 
-  [31mx[0m Expression expected
-     ,-[[36;1;4m/home/runner/work/vector-intelligence/vector-intelligence/app/api/agents/orchestrator/route.ts[0m:166:1]
- [2m166[0m |     executed_trades: execResult?.trades_executed ?? 0,
- [2m167[0m |     results,
- [2m168[0m |   });
- [2m169[0m | }
-     : [31;1m^[0m
- [2m170[0m | 
- [2m171[0m | export async function GET() {
- [2m172[0m |   const { data } = await sb.from('agent_status').select('*').order('agent');
-     `----
 
-Caused by:
-    Syntax Error
+○  (Static)   prerendered as static content
+ƒ  (Dynamic)  server-rendered on demand
 
-Import trace for requested module:
-./app/api/agents/orchestrator/route.ts
-
-
-> Build failed because of webpack errors
 ​
-"build.command" failed                                        
+(build.command completed in 32s)
+​
+Functions bundling                                            
 ────────────────────────────────────────────────────────────────
 ​
-  Error message
-  Command failed with exit code 1: npm run build
+Packaging Functions from .netlify/functions-internal directory:
+ - ___netlify-server-handler/___netlify-server-handler.mjs
 ​
-  Error location
-  In build.command from netlify.toml:
-  npm run build
 ​
-  Resolved config
-  build:
-    command: npm run build
-    commandOrigin: config
-    environment:
-      - NEXT_PUBLIC_SUPABASE_URL
-      - NEXT_PUBLIC_SUPABASE_ANON_KEY
-      - GROQ_API_KEY
-      - NODE_VERSION
-      - NPM_FLAGS
-    publish: /home/runner/work/vector-intelligence/vector-intelligence/.next
-    publishOrigin: config
-  functions:
-    '*':
-      node_bundler: esbuild
-  plugins:
-    - inputs: {}
-      origin: config
-      package: '@netlify/plugin-nextjs'
+(Functions bundling completed in 1.3s)
+Deploy path:        /home/runner/work/vector-intelligence/vector-intelligence/.next
+Configuration path: /home/runner/work/vector-intelligence/vector-intelligence/netlify.toml
+Deploying to main site URL...
+- Uploading blobs to deploy store...
+
+​
+Netlify Build                                                 
+────────────────────────────────────────────────────────────────
+​
+❯ Version
+  @netlify/build 29.58.0
+​
+❯ Flags
+  auth: nfp_XTqFy1PBLJTvEUnoJ5xsuKXb792ggU1Q7d8a
+  build: true
+  deployId: 6a47727bb3c4b9b1dba9cdbd
+  open: false
+  prod: true
+  prodIfUnlocked: false
+  site: dbcaa8a5-bee5-46b0-bee0-97537ed10127
+  skipFunctionsCache: false
+​
+❯ Current directory
+  /home/runner/work/vector-intelligence/vector-intelligence
+​
+❯ Config file
+  /home/runner/work/vector-intelligence/vector-intelligence/netlify.toml
+​
+❯ Context
+  dev
+​
+Uploading blobs to deploy store                               
+────────────────────────────────────────────────────────────────
+​
+​
+(Uploading blobs completed in 585ms)
+✔ Finished uploading blobs to deploy store
+- Hashing files...
+- Looking for a functions cache...
+✔ Deploying functions from cache (use --skip-functions-cache to override)
+✔ Finished hashing 18 files, 1 functions and edge functions
+- CDN diffing files...
+✔ CDN requesting 4 files and 1 functions
+- Uploading 5 files
+✔ Finished uploading 5 assets
+- Waiting for deploy to go live...
+✔ Deploy is live!
+(node:2555) MaxListenersExceededWarning: Possible EventEmitter memory leak detected. 11 unpipe listeners added to [Socket]. MaxListeners is 10. Use emitter.setMaxListeners() to increase limit
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:2555) MaxListenersExceededWarning: Possible EventEmitter memory leak detected. 11 error listeners added to [Socket]. MaxListeners is 10. Use emitter.setMaxListeners() to increase limit
+(node:2555) MaxListenersExceededWarning: Possible EventEmitter memory leak detected. 11 close listeners added to [Socket]. MaxListeners is 10. Use emitter.setMaxListeners() to increase limit
+(node:2555) MaxListenersExceededWarning: Possible EventEmitter memory leak detected. 11 finish listeners added to [Socket]. MaxListeners is 10. Use emitter.setMaxListeners() to increase limit
+(node:2555) MaxListenersExceededWarning: Possible EventEmitter memory leak detected. 11 unpipe listeners added to [Socket]. MaxListeners is 10. Use emitter.setMaxListeners() to increase limit
+(node:2555) MaxListenersExceededWarning: Possible EventEmitter memory leak detected. 11 error listeners added to [Socket]. MaxListeners is 10. Use emitter.setMaxListeners() to increase limit
+(node:2555) MaxListenersExceededWarning: Possible EventEmitter memory leak detected. 11 close listeners added to [Socket]. MaxListeners is 10. Use emitter.setMaxListeners() to increase limit
+(node:2555) MaxListenersExceededWarning: Possible EventEmitter memory leak detected. 11 finish listeners added to [Socket]. MaxListeners is 10. Use emitter.setMaxListeners() to increase limit
+​
+Netlify Build Complete                                        
+────────────────────────────────────────────────────────────────
+​
+(Netlify Build completed in 56.3s)
+
+Build logs:         https://app.netlify.com/projects/vector-intelligence-prod/deploys/6a47727bb3c4b9b1dba9cdbd
+Function logs:      https://app.netlify.com/projects/vector-intelligence-prod/logs/functions
+Edge function Logs: https://app.netlify.com/projects/vector-intelligence-prod/logs/edge-functions
+Unique deploy URL:  https://6a47727bb3c4b9b1dba9cdbd--vector-intelligence-prod.netlify.app
+Website URL:        https://vector-intelligence-prod.netlify.app
