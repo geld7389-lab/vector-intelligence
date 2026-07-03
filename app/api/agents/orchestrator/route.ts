@@ -52,8 +52,12 @@ export async function POST(req: NextRequest) {
       signal: AbortSignal.timeout(25000),
     });
     monitorResult = await monRes.json();
-  } catch {}
-  if (monitorResult?.closed?.length) {
+  } catch (e: any) {
+    monitorResult = { ok: false, error: 'fetch_failed: ' + e.message };
+  }
+  if (monitorResult?.error) {
+    await saveAgentStatus('position_monitor', 'running', `⚠ Error: ${monitorResult.error}`);
+  } else if (monitorResult?.closed?.length) {
     await saveAgentStatus('position_monitor', 'running',
       `Closed ${monitorResult.closed.length}: ${monitorResult.closed.map((c:any)=>`${c.symbol} ${c.reason}`).join(', ')}`);
   } else {

@@ -52,7 +52,8 @@ export async function POST() {
   try {
     // Get MT5 token
     const { data: mt5Session } = await sb.from('agent_status').select('data').eq('agent', 'mt5_session').single();
-    const sessionData = mt5Session?.data ? JSON.parse(mt5Session.data) : null;
+    const rawData = mt5Session?.data;
+    const sessionData = typeof rawData === 'string' ? JSON.parse(rawData) : rawData;
     const token = sessionData?.token;
     if (!token) return NextResponse.json({ ok: true, skipped: 'no MT5 token', checked: 0 });
 
