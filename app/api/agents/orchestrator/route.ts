@@ -62,7 +62,6 @@ export async function POST(req: NextRequest) {
         ? `Watching ${monitorResult.checked} open position(s) — no stops hit`
         : monitorResult?.skipped ?? 'No open positions to monitor');
   }
-  }
 
   // 1. Market Structure
   await saveAgentStatus('market_structure', 'running', 'Scanning market structure...');

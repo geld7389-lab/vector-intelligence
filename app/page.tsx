@@ -1424,6 +1424,13 @@ function AgentsTab() {
     return () => clearInterval(iv);
   }, [loadStatus]);
 
+  // Auto-refresh MT5 account panel every 30s so balance/equity/P&L stay live
+  React.useEffect(() => {
+    if (!mt5Token) return;
+    const iv = setInterval(() => loadMt5Accounts(mt5Token), 30000);
+    return () => clearInterval(iv);
+  }, [mt5Token, loadMt5Accounts]);
+
   const runAgents = async () => {
     setRunning(true); setRunResult(null);
     try {
