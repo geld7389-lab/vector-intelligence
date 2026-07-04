@@ -1450,15 +1450,25 @@ function AgentsTab() {
 
   const getAgent = (key: string) => data?.agents?.[key] ?? { status:'idle', last_action:'Not run yet' };
 
+  const [manuallyClosedTickets, setManuallyClosedTickets] = React.useState<Record<string, boolean>>({});
+
   const closeTrade = async (ticket: string, tradeId?: string) => {
     if (!confirm(`Close position #${ticket} now?`)) return;
     setClosingTicket(ticket);
     try {
-      await fetch('/api/trades/close', {
+      const r = await fetch('/api/trades/close', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ticket, tradeId }),
       });
+      const d = await r.json();
+      // The Active Trades list is built from the last agent cycle's cached data
+      // (executor.executed / monitor.watching), which won't reflect this close
+      // until the next full cycle runs. Hide it immediately on our end so the
+      // person isn't stuck looking at a position that's actually already closed.
+      if (d?.ok) {
+        setManuallyClosedTickets(p => ({ ...p, [ticket]: true }));
+      }
       loadStatus();
     } catch {}
     setClosingTicket(null);
@@ -1534,7 +1544,9 @@ function AgentsTab() {
         const byTicket: Record<string, any> = {};
         for (const t of justExecuted) byTicket[t.ticket] = { ...t };
         for (const w of monitorWatching) byTicket[w.ticket] = { ...byTicket[w.ticket], ...w };
-        const activeTrades = Object.values(byTicket) as any[];
+        const activeTrades = (Object.values(byTicket) as any[]).filter(
+          t => !manuallyClosedTickets[String(t.ticket)]
+        );
         const approvedSetups = (data?.approved_trades ?? []).filter(
           (t: any, i: number) => !dismissedSetups[`${t.symbol}-${t.direction}-${i}`]
         );
