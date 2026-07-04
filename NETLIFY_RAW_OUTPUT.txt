@@ -49,7 +49,7 @@ $ npm run build
    Collecting build traces ...
 
 Route (app)                              Size     First Load JS
-┌ ○ /                                    83.4 kB         170 kB
+┌ ○ /                                    83.5 kB         171 kB
 ├ ○ /_not-found                          871 B          87.9 kB
 ├ ƒ /api/agents/ai-brain                 0 B                0 B
 ├ ƒ /api/agents/alerts                   0 B                0 B
@@ -111,7 +111,7 @@ Route (app)                              Size     First Load JS
 ƒ  (Dynamic)  server-rendered on demand
 
 ​
-(build.command completed in 30s)
+(build.command completed in 24.1s)
 ​
 Functions bundling                                            
 ────────────────────────────────────────────────────────────────
@@ -120,7 +120,7 @@ Packaging Functions from .netlify/functions-internal directory:
  - ___netlify-server-handler/___netlify-server-handler.mjs
 ​
 ​
-(Functions bundling completed in 1.2s)
+(Functions bundling completed in 1s)
 Deploy path:        /home/runner/work/vector-intelligence/vector-intelligence/.next
 Configuration path: /home/runner/work/vector-intelligence/vector-intelligence/netlify.toml
 Deploying to main site URL...
@@ -136,7 +136,7 @@ Netlify Build
 ❯ Flags
   auth: nfp_XTqFy1PBLJTvEUnoJ5xsuKXb792ggU1Q7d8a
   build: true
-  deployId: 6a4853850a5c26e12d84ce8b
+  deployId: 6a485664a67d2a8a32f62a00
   open: false
   prod: true
   prodIfUnlocked: false
@@ -156,35 +156,35 @@ Uploading blobs to deploy store
 ────────────────────────────────────────────────────────────────
 ​
 ​
-(Uploading blobs completed in 369ms)
+(Uploading blobs completed in 559ms)
 ✔ Finished uploading blobs to deploy store
 - Hashing files...
 - Looking for a functions cache...
 ✔ Deploying functions from cache (use --skip-functions-cache to override)
 ✔ Finished hashing 18 files, 1 functions and edge functions
 - CDN diffing files...
-✔ CDN requesting 3 files and 1 functions
-- Uploading 4 files
-✔ Finished uploading 4 assets
+✔ CDN requesting 1 files and 1 functions
+- Uploading 2 files
+✔ Finished uploading 2 assets
 - Waiting for deploy to go live...
 ✔ Deploy is live!
-(node:2538) MaxListenersExceededWarning: Possible EventEmitter memory leak detected. 11 unpipe listeners added to [Socket]. MaxListeners is 10. Use emitter.setMaxListeners() to increase limit
+(node:2412) MaxListenersExceededWarning: Possible EventEmitter memory leak detected. 11 unpipe listeners added to [Socket]. MaxListeners is 10. Use emitter.setMaxListeners() to increase limit
 (Use `node --trace-warnings ...` to show where the warning was created)
-(node:2538) MaxListenersExceededWarning: Possible EventEmitter memory leak detected. 11 error listeners added to [Socket]. MaxListeners is 10. Use emitter.setMaxListeners() to increase limit
-(node:2538) MaxListenersExceededWarning: Possible EventEmitter memory leak detected. 11 close listeners added to [Socket]. MaxListeners is 10. Use emitter.setMaxListeners() to increase limit
-(node:2538) MaxListenersExceededWarning: Possible EventEmitter memory leak detected. 11 finish listeners added to [Socket]. MaxListeners is 10. Use emitter.setMaxListeners() to increase limit
-(node:2538) MaxListenersExceededWarning: Possible EventEmitter memory leak detected. 11 unpipe listeners added to [Socket]. MaxListeners is 10. Use emitter.setMaxListeners() to increase limit
-(node:2538) MaxListenersExceededWarning: Possible EventEmitter memory leak detected. 11 error listeners added to [Socket]. MaxListeners is 10. Use emitter.setMaxListeners() to increase limit
-(node:2538) MaxListenersExceededWarning: Possible EventEmitter memory leak detected. 11 close listeners added to [Socket]. MaxListeners is 10. Use emitter.setMaxListeners() to increase limit
-(node:2538) MaxListenersExceededWarning: Possible EventEmitter memory leak detected. 11 finish listeners added to [Socket]. MaxListeners is 10. Use emitter.setMaxListeners() to increase limit
+(node:2412) MaxListenersExceededWarning: Possible EventEmitter memory leak detected. 11 error listeners added to [Socket]. MaxListeners is 10. Use emitter.setMaxListeners() to increase limit
+(node:2412) MaxListenersExceededWarning: Possible EventEmitter memory leak detected. 11 close listeners added to [Socket]. MaxListeners is 10. Use emitter.setMaxListeners() to increase limit
+(node:2412) MaxListenersExceededWarning: Possible EventEmitter memory leak detected. 11 finish listeners added to [Socket]. MaxListeners is 10. Use emitter.setMaxListeners() to increase limit
+(node:2412) MaxListenersExceededWarning: Possible EventEmitter memory leak detected. 11 unpipe listeners added to [Socket]. MaxListeners is 10. Use emitter.setMaxListeners() to increase limit
+(node:2412) MaxListenersExceededWarning: Possible EventEmitter memory leak detected. 11 error listeners added to [Socket]. MaxListeners is 10. Use emitter.setMaxListeners() to increase limit
+(node:2412) MaxListenersExceededWarning: Possible EventEmitter memory leak detected. 11 close listeners added to [Socket]. MaxListeners is 10. Use emitter.setMaxListeners() to increase limit
+(node:2412) MaxListenersExceededWarning: Possible EventEmitter memory leak detected. 11 finish listeners added to [Socket]. MaxListeners is 10. Use emitter.setMaxListeners() to increase limit
 ​
 Netlify Build Complete                                        
 ────────────────────────────────────────────────────────────────
 ​
-(Netlify Build completed in 49s)
+(Netlify Build completed in 44.1s)
 
-Build logs:         https://app.netlify.com/projects/vector-intelligence-prod/deploys/6a4853850a5c26e12d84ce8b
+Build logs:         https://app.netlify.com/projects/vector-intelligence-prod/deploys/6a485664a67d2a8a32f62a00
 Function logs:      https://app.netlify.com/projects/vector-intelligence-prod/logs/functions
 Edge function Logs: https://app.netlify.com/projects/vector-intelligence-prod/logs/edge-functions
-Unique deploy URL:  https://6a4853850a5c26e12d84ce8b--vector-intelligence-prod.netlify.app
+Unique deploy URL:  https://6a485664a67d2a8a32f62a00--vector-intelligence-prod.netlify.app
 Website URL:        https://vector-intelligence-prod.netlify.app
