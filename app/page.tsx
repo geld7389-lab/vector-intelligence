@@ -1521,6 +1521,16 @@ function AgentsTab() {
           <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
             {AGENT_DEFS.map(a => {
               const s = getAgent(a.key);
+              let displayText = s.last_action || a.desc;
+              if (a.key === 'position_monitor') {
+                const watching = (s.data?.watching ?? []) as any[];
+                const stillWatching = watching.filter(w => !manuallyClosedTickets[String(w.ticket)]);
+                if (watching.length !== stillWatching.length) {
+                  displayText = stillWatching.length
+                    ? `Watching ${stillWatching.length} open position(s) — no stops hit`
+                    : 'No open positions to monitor';
+                }
+              }
               return (
                 <div key={a.key} className="rounded-lg border border-zinc-800 bg-zinc-950 p-3 space-y-1.5">
                   <div className="flex items-center justify-between">
@@ -1529,7 +1539,7 @@ function AgentsTab() {
                   </div>
                   <div className="text-[11px] font-semibold text-zinc-200">{a.name}</div>
                   <div className={cx('text-[10px]', textColor(s.status))}>{s.status}</div>
-                  <div className="text-[10px] text-zinc-600 line-clamp-2">{s.last_action || a.desc}</div>
+                  <div className="text-[10px] text-zinc-600 line-clamp-2">{displayText}</div>
                 </div>
               );
             })}
