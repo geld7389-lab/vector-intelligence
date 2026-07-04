@@ -172,7 +172,18 @@ export async function POST(req: NextRequest) {
   const executed: any[] = [];
   const failed: any[] = [];
 
+  // Live open-symbols check, queried fresh right now (not just trusting the risk
+  // snapshot from earlier in this cycle) — this is what actually stops the same
+  // coin/symbol from being re-entered while a position is already open on it.
+  const { data: currentOpenTrades } = await sb.from('trades').select('symbol').eq('result', 'open');
+  const openSymbolsNow = new Set((currentOpenTrades ?? []).map((t: any) => t.symbol));
+  const symbolsUsedThisCycle = new Set<string>();
+
   for (const trade of approved_trades.slice(0, 2)) { // max 2 trades per cycle
+    if (openSymbolsNow.has(trade.symbol) || symbolsUsedThisCycle.has(trade.symbol)) {
+      failed.push({ symbol: trade.symbol, reason: `Skipped — already have an open ${trade.symbol} position` });
+      continue;
+    }
     if (executed.length > 0) await new Promise(r => setTimeout(r, 1500)); // 1.5s delay between trades
     const mt5Symbol = MT5_SYMBOL_MAP[trade.symbol] ?? trade.symbol;
     const pointSize = POINT_SIZE[mt5Symbol] ?? 0.0001;
@@ -245,6 +256,7 @@ export async function POST(req: NextRequest) {
           slTpMode: 'client-side',
           dbError,
         });
+        symbolsUsedThisCycle.add(trade.symbol);
       } else {
         failed.push({ symbol: trade.symbol, reason: `MT5 rejected: ${JSON.stringify(result)}` });
       }

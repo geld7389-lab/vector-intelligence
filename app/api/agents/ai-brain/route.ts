@@ -96,8 +96,10 @@ export async function POST(req: NextRequest) {
   const { biases={}, fvgs=[], order_blocks=[], confluence={}, macro={}, risk={} } = await req.json().catch(()=>({}));
 
   const candidates: any[] = [];
+  const openSymbols: string[] = risk.open_symbols ?? [];
 
   for (const [sym, tech] of Object.entries(confluence) as [string,any][]) {
+    if (openSymbols.includes(sym)) continue; // already have an open position on this symbol
     const bias = biases[sym] ?? 'neutral';
 
     // Determine best direction from all signals
