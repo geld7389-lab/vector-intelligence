@@ -111,7 +111,7 @@ Route (app)                              Size     First Load JS
 ƒ  (Dynamic)  server-rendered on demand
 
 ​
-(build.command completed in 32.9s)
+(build.command completed in 32.6s)
 ​
 Functions bundling                                            
 ────────────────────────────────────────────────────────────────
@@ -120,7 +120,7 @@ Packaging Functions from .netlify/functions-internal directory:
  - ___netlify-server-handler/___netlify-server-handler.mjs
 ​
 ​
-(Functions bundling completed in 1.4s)
+(Functions bundling completed in 1.3s)
 Deploy path:        /home/runner/work/vector-intelligence/vector-intelligence/.next
 Configuration path: /home/runner/work/vector-intelligence/vector-intelligence/netlify.toml
 Deploying to main site URL...
@@ -136,7 +136,7 @@ Netlify Build
 ❯ Flags
   auth: nfp_XTqFy1PBLJTvEUnoJ5xsuKXb792ggU1Q7d8a
   build: true
-  deployId: 6a485859ad49e48a965bc73b
+  deployId: 6a4906e3f5bf8cf67899a311
   open: false
   prod: true
   prodIfUnlocked: false
@@ -156,35 +156,35 @@ Uploading blobs to deploy store
 ────────────────────────────────────────────────────────────────
 ​
 ​
-(Uploading blobs completed in 229ms)
+(Uploading blobs completed in 573ms)
 ✔ Finished uploading blobs to deploy store
 - Hashing files...
 - Looking for a functions cache...
 ✔ Deploying functions from cache (use --skip-functions-cache to override)
 ✔ Finished hashing 18 files, 1 functions and edge functions
 - CDN diffing files...
-✔ CDN requesting 1 files and 1 functions
-- Uploading 2 files
-✔ Finished uploading 2 assets
+✔ CDN requesting 0 files and 1 functions
+- Uploading 1 files
+✔ Finished uploading 1 assets
 - Waiting for deploy to go live...
 ✔ Deploy is live!
-(node:2549) MaxListenersExceededWarning: Possible EventEmitter memory leak detected. 11 unpipe listeners added to [Socket]. MaxListeners is 10. Use emitter.setMaxListeners() to increase limit
+(node:2568) MaxListenersExceededWarning: Possible EventEmitter memory leak detected. 11 unpipe listeners added to [Socket]. MaxListeners is 10. Use emitter.setMaxListeners() to increase limit
 (Use `node --trace-warnings ...` to show where the warning was created)
-(node:2549) MaxListenersExceededWarning: Possible EventEmitter memory leak detected. 11 error listeners added to [Socket]. MaxListeners is 10. Use emitter.setMaxListeners() to increase limit
-(node:2549) MaxListenersExceededWarning: Possible EventEmitter memory leak detected. 11 close listeners added to [Socket]. MaxListeners is 10. Use emitter.setMaxListeners() to increase limit
-(node:2549) MaxListenersExceededWarning: Possible EventEmitter memory leak detected. 11 finish listeners added to [Socket]. MaxListeners is 10. Use emitter.setMaxListeners() to increase limit
-(node:2549) MaxListenersExceededWarning: Possible EventEmitter memory leak detected. 11 unpipe listeners added to [Socket]. MaxListeners is 10. Use emitter.setMaxListeners() to increase limit
-(node:2549) MaxListenersExceededWarning: Possible EventEmitter memory leak detected. 11 error listeners added to [Socket]. MaxListeners is 10. Use emitter.setMaxListeners() to increase limit
-(node:2549) MaxListenersExceededWarning: Possible EventEmitter memory leak detected. 11 close listeners added to [Socket]. MaxListeners is 10. Use emitter.setMaxListeners() to increase limit
-(node:2549) MaxListenersExceededWarning: Possible EventEmitter memory leak detected. 11 finish listeners added to [Socket]. MaxListeners is 10. Use emitter.setMaxListeners() to increase limit
+(node:2568) MaxListenersExceededWarning: Possible EventEmitter memory leak detected. 11 error listeners added to [Socket]. MaxListeners is 10. Use emitter.setMaxListeners() to increase limit
+(node:2568) MaxListenersExceededWarning: Possible EventEmitter memory leak detected. 11 close listeners added to [Socket]. MaxListeners is 10. Use emitter.setMaxListeners() to increase limit
+(node:2568) MaxListenersExceededWarning: Possible EventEmitter memory leak detected. 11 finish listeners added to [Socket]. MaxListeners is 10. Use emitter.setMaxListeners() to increase limit
+(node:2568) MaxListenersExceededWarning: Possible EventEmitter memory leak detected. 11 unpipe listeners added to [Socket]. MaxListeners is 10. Use emitter.setMaxListeners() to increase limit
+(node:2568) MaxListenersExceededWarning: Possible EventEmitter memory leak detected. 11 error listeners added to [Socket]. MaxListeners is 10. Use emitter.setMaxListeners() to increase limit
+(node:2568) MaxListenersExceededWarning: Possible EventEmitter memory leak detected. 11 close listeners added to [Socket]. MaxListeners is 10. Use emitter.setMaxListeners() to increase limit
+(node:2568) MaxListenersExceededWarning: Possible EventEmitter memory leak detected. 11 finish listeners added to [Socket]. MaxListeners is 10. Use emitter.setMaxListeners() to increase limit
 ​
 Netlify Build Complete                                        
 ────────────────────────────────────────────────────────────────
 ​
-(Netlify Build completed in 52s)
+(Netlify Build completed in 55s)
 
-Build logs:         https://app.netlify.com/projects/vector-intelligence-prod/deploys/6a485859ad49e48a965bc73b
+Build logs:         https://app.netlify.com/projects/vector-intelligence-prod/deploys/6a4906e3f5bf8cf67899a311
 Function logs:      https://app.netlify.com/projects/vector-intelligence-prod/logs/functions
 Edge function Logs: https://app.netlify.com/projects/vector-intelligence-prod/logs/edge-functions
-Unique deploy URL:  https://6a485859ad49e48a965bc73b--vector-intelligence-prod.netlify.app
+Unique deploy URL:  https://6a4906e3f5bf8cf67899a311--vector-intelligence-prod.netlify.app
 Website URL:        https://vector-intelligence-prod.netlify.app
