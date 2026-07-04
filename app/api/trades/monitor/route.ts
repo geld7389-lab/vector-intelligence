@@ -67,11 +67,68 @@ export async function POST() {
 
     if (!openTrades?.length) return NextResponse.json({ ok: true, checked: 0, closed: [] });
 
+    // Cross-check against REAL live MT5 positions. If a trade was closed manually
+    // on MT5 directly (outside this app), its Supabase row never gets updated and
+    // the monitor would otherwise "watch" a phantom position forever, since price
+    // may never naturally cross that trade's old SL/TP again.
+    let livePositionTickets = new Set<string>();
+    try {
+      const posRes = await fetch(`${MT5_BASE}/OpenedOrders?id=${token}`, {
+        headers: { accept: 'text/json' },
+        signal: AbortSignal.timeout(10000),
+      });
+      const posText = await posRes.text();
+      const positions = JSON.parse(posText);
+      if (Array.isArray(positions)) {
+        livePositionTickets = new Set(
+          positions.map((p: any) => String(p.ticket ?? p.Ticket ?? p.orderTicket ?? ''))
+        );
+      }
+    } catch {
+      // If we can't reach MT5 at all, don't wipe out trades based on a failed fetch —
+      // skip the orphan-check this run rather than risk false-closing everything.
+      livePositionTickets = null as any;
+    }
+
+    const orphaned: any[] = [];
+    const stillOpenTrades: any[] = [];
+    if (livePositionTickets) {
+      for (const trade of openTrades) {
+        const ticketMatch = trade.notes?.match(/Ticket:\s*(\d+)/);
+        const ticket = ticketMatch?.[1];
+        if (ticket && !livePositionTickets.has(ticket)) {
+          // Position no longer exists on the broker — mark closed so we stop watching it
+          await sb.from('trades').update({
+            result: 'closed_external',
+            notes: (trade.notes ?? '') + ` | Closed outside app (not found in live MT5 positions) @ ${new Date().toISOString()}`,
+          }).eq('id', trade.id);
+          orphaned.push({ symbol: trade.symbol, ticket });
+        } else {
+          stillOpenTrades.push(trade);
+        }
+      }
+    } else {
+      stillOpenTrades.push(...openTrades);
+    }
+
+    if (!stillOpenTrades.length) {
+      await sb.from('agent_status').upsert({
+        agent: 'position_monitor',
+        status: 'running',
+        last_action: orphaned.length
+          ? `Removed ${orphaned.length} stale position(s) closed outside the app: ${orphaned.map(o => o.symbol).join(', ')}`
+          : 'No open positions to monitor',
+        data: JSON.stringify({ checked: 0, closed: [], watching: [], orphaned, last_run: new Date().toISOString() }),
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'agent' });
+      return NextResponse.json({ ok: true, checked: 0, closed: [], orphaned });
+    }
+
     const closed: any[] = [];
     const watching: any[] = [];
     const errors: any[] = [];
 
-    for (const trade of openTrades) {
+    for (const trade of stillOpenTrades) {
       // Extract MT5 ticket from notes field: "... | Ticket: 59201089 | ..."
       const ticketMatch = trade.notes?.match(/Ticket:\s*(\d+)/);
       if (!ticketMatch) continue;
@@ -128,16 +185,18 @@ export async function POST() {
     await sb.from('agent_status').upsert({
       agent: 'position_monitor',
       status: 'running',
-      last_action: closed.length
-        ? `Closed ${closed.length} position(s): ${closed.map(c => `${c.symbol} (${c.reason})`).join(', ')}`
-        : watching.length
-          ? `Watching ${watching.length} open position(s) — no stops hit`
-          : 'No open positions to monitor',
-      data: JSON.stringify({ checked: openTrades.length, closed, watching, last_run: new Date().toISOString() }),
+      last_action: (() => {
+        const parts = [];
+        if (orphaned.length) parts.push(`Removed ${orphaned.length} closed-outside-app: ${orphaned.map(o=>o.symbol).join(', ')}`);
+        if (closed.length) parts.push(`Closed ${closed.length}: ${closed.map(c => `${c.symbol} (${c.reason})`).join(', ')}`);
+        if (!parts.length) parts.push(watching.length ? `Watching ${watching.length} open position(s) — no stops hit` : 'No open positions to monitor');
+        return parts.join(' | ');
+      })(),
+      data: JSON.stringify({ checked: stillOpenTrades.length, closed, watching, orphaned, last_run: new Date().toISOString() }),
       updated_at: new Date().toISOString(),
     }, { onConflict: 'agent' });
 
-    return NextResponse.json({ ok: true, checked: openTrades.length, closed, watching, errors });
+    return NextResponse.json({ ok: true, checked: stillOpenTrades.length, closed, watching, orphaned, errors });
   } catch (e: any) {
     return NextResponse.json({ ok: false, error: e.message }, { status: 500 });
   }
