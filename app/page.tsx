@@ -1247,6 +1247,9 @@ function AgentsTab() {
   const [loading, setLoading] = React.useState(true);
   const [running, setRunning] = React.useState(false);
   const [runResult, setRunResult] = React.useState<any>(null);
+  const [collapsedTrades, setCollapsedTrades] = React.useState<Record<string, boolean>>({});
+  const [dismissedSetups, setDismissedSetups] = React.useState<Record<string, boolean>>({});
+  const [closingTicket, setClosingTicket] = React.useState<string | null>(null);
   const [lastRun, setLastRun] = React.useState<string>('Never');
 
   // MT5 Connection state — uses mtapi.io (no API key needed)
@@ -1446,6 +1449,20 @@ function AgentsTab() {
   };
 
   const getAgent = (key: string) => data?.agents?.[key] ?? { status:'idle', last_action:'Not run yet' };
+
+  const closeTrade = async (ticket: string, tradeId?: string) => {
+    if (!confirm(`Close position #${ticket} now?`)) return;
+    setClosingTicket(ticket);
+    try {
+      await fetch('/api/trades/close', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ticket, tradeId }),
+      });
+      loadStatus();
+    } catch {}
+    setClosingTicket(null);
+  };
   const dotColor = (s: string) => s==='running'?'bg-emerald-500 animate-pulse':s==='paused'?'bg-yellow-500 animate-pulse':s==='idle'?'bg-zinc-600':'bg-zinc-700';
   const textColor = (s: string) => s==='running'?'text-emerald-400':s==='paused'?'text-yellow-400':'text-zinc-600';
 
@@ -1510,45 +1527,112 @@ function AgentsTab() {
         )}
       </div>
 
-      {/* ACTIVE TRADES — real executed positions with entry/SL/TP charted */}
+      {/* ACTIVE TRADES + AI-APPROVED SETUPS — combined, with collapse/remove controls */}
       {(() => {
         const monitorWatching = getAgent('position_monitor')?.data?.watching ?? [];
         const justExecuted = getAgent('executor')?.data?.executed ?? [];
-        // Merge, de-dupe by ticket, prefer monitor's live currentPrice when available
         const byTicket: Record<string, any> = {};
         for (const t of justExecuted) byTicket[t.ticket] = { ...t };
         for (const w of monitorWatching) byTicket[w.ticket] = { ...byTicket[w.ticket], ...w };
-        const activeTrades = Object.values(byTicket);
-        if (!activeTrades.length) return null;
+        const activeTrades = Object.values(byTicket) as any[];
+        const approvedSetups = (data?.approved_trades ?? []).filter(
+          (t: any, i: number) => !dismissedSetups[`${t.symbol}-${t.direction}-${i}`]
+        );
+
+        if (!activeTrades.length && !approvedSetups.length) return null;
+
         return (
-          <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4">
-            <div className="text-[10px] text-zinc-600 uppercase tracking-wider mb-3">Active Trades — Entry / SL / TP</div>
-            <div className="space-y-4">
-              {activeTrades.map((t: any, i: number) => (
-                <div key={t.ticket ?? i} className="rounded-lg border border-zinc-800 bg-zinc-950 p-3">
-                  <div className="flex items-center gap-2 mb-1 text-xs">
-                    <span className="font-bold text-zinc-100">{t.symbol}</span>
-                    <span className={cx('px-2 py-0.5 rounded text-[10px] font-bold', t.direction==='buy'?'bg-emerald-900/60 text-emerald-400':'bg-red-900/60 text-red-400')}>
-                      {t.direction?.toUpperCase()}
-                    </span>
-                    {t.ticket && <span className="text-zinc-600 font-mono">#{t.ticket}</span>}
-                    {t.currentPrice != null && <span className="text-zinc-500 ml-auto">now {t.currentPrice}</span>}
-                  </div>
-                  <CandleChart
-                    symbol={t.symbol}
-                    timeframe="15m"
-                    entry_low={t.entry}
-                    entry_high={t.entry}
-                    stop_loss={t.sl}
-                    target={t.tp}
-                  />
+          <div className="space-y-4">
+            {activeTrades.length > 0 && (
+              <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4">
+                <div className="text-[10px] text-zinc-600 uppercase tracking-wider mb-3">Active Trades — Entry / SL / TP</div>
+                <div className="space-y-4">
+                  {activeTrades.map((t: any, i: number) => {
+                    const key = String(t.ticket ?? i);
+                    const isCollapsed = collapsedTrades[key];
+                    return (
+                      <div key={key} className="rounded-lg border border-zinc-800 bg-zinc-950 p-3">
+                        <div className="flex items-center gap-2 mb-1 text-xs">
+                          <span className="font-bold text-zinc-100">{t.symbol}</span>
+                          <span className={cx('px-2 py-0.5 rounded text-[10px] font-bold', t.direction==='buy'?'bg-emerald-900/60 text-emerald-400':'bg-red-900/60 text-red-400')}>
+                            {t.direction?.toUpperCase()}
+                          </span>
+                          {t.ticket && <span className="text-zinc-600 font-mono">#{t.ticket}</span>}
+                          {t.currentPrice != null && <span className="text-zinc-500 ml-auto">now {t.currentPrice}</span>}
+                          <button
+                            onClick={() => setCollapsedTrades(p => ({ ...p, [key]: !p[key] }))}
+                            className="text-zinc-500 hover:text-zinc-300 px-1.5 py-0.5 rounded border border-zinc-800"
+                            title={isCollapsed ? 'Show chart' : 'Hide chart'}
+                          >
+                            {isCollapsed ? '▸' : '▾'}
+                          </button>
+                          <button
+                            onClick={() => closeTrade(t.ticket, t.id)}
+                            disabled={closingTicket === t.ticket}
+                            className="text-red-400 hover:text-red-300 px-1.5 py-0.5 rounded border border-red-900/50 disabled:opacity-40"
+                            title="Close this position"
+                          >
+                            {closingTicket === t.ticket ? '…' : '✕'}
+                          </button>
+                        </div>
+                        {!isCollapsed && (
+                          <CandleChart
+                            symbol={t.symbol}
+                            timeframe="15m"
+                            entry_low={t.entry}
+                            entry_high={t.entry}
+                            stop_loss={t.sl}
+                            target={t.tp}
+                          />
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
-              ))}
-            </div>
+              </div>
+            )}
+
+            {approvedSetups.length > 0 && (
+              <div className="rounded-xl border border-emerald-800/40 bg-emerald-900/10 p-4">
+                <div className="text-[10px] text-emerald-600 uppercase tracking-wider mb-3">✓ AI-Approved Setups (Score ≥7)</div>
+                <div className="space-y-3">
+                  {(data.approved_trades as any[]).map((t: any, i: number) => {
+                    const dismissKey = `${t.symbol}-${t.direction}-${i}`;
+                    if (dismissedSetups[dismissKey]) return null;
+                    return (
+                      <div key={i} className="rounded-lg border border-zinc-800 bg-zinc-950 p-3 text-xs space-y-1">
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-zinc-100">{t.symbol}</span>
+                          <span className={cx('px-2 py-0.5 rounded text-[10px] font-bold', t.direction==='buy'?'bg-emerald-900/60 text-emerald-400':'bg-red-900/60 text-red-400')}>
+                            {t.direction?.toUpperCase()}
+                          </span>
+                          <span className="px-2 py-0.5 rounded bg-zinc-800 text-zinc-200 text-[10px] font-bold">{t.setup_score}/10</span>
+                          <span className="text-zinc-500">{t.confidence}</span>
+                          <button
+                            onClick={() => setDismissedSetups(p => ({ ...p, [dismissKey]: true }))}
+                            className="ml-auto text-zinc-500 hover:text-red-400 px-1.5 py-0.5 rounded border border-zinc-800"
+                            title="Dismiss this setup"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                        <div className="text-zinc-400">{t.primary_reason}</div>
+                        <div className="flex gap-4 text-zinc-600">
+                          <span>Entry: {t.entry_zone}</span>
+                          <span>Target: {t.target}</span>
+                        </div>
+                        <div className="text-zinc-700">Invalidation: {t.invalidation}</div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </div>
         );
       })()}
-      {(data?.approved_trades?.length ?? 0) > 0 && (
+
+      {false && (data?.approved_trades?.length ?? 0) > 0 && (
         <div className="rounded-xl border border-emerald-800/40 bg-emerald-900/10 p-4">
           <div className="text-[10px] text-emerald-600 uppercase tracking-wider mb-3">✓ AI-Approved Setups (Score ≥7)</div>
           <div className="space-y-3">

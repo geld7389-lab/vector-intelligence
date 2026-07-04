@@ -113,6 +113,7 @@ export async function POST() {
         });
       } else {
         watching.push({
+          id: trade.id,
           symbol: trade.symbol,
           ticket,
           direction: trade.direction,
@@ -130,7 +131,7 @@ export async function POST() {
       last_action: closed.length
         ? `Closed ${closed.length} position(s): ${closed.map(c => `${c.symbol} (${c.reason})`).join(', ')}`
         : watching.length
-          ? `Watching: ${watching.map(w => `${w.symbol} ${w.direction.toUpperCase()} entry ${w.entry} SL ${w.sl} TP ${w.tp} (now ${w.currentPrice})`).join(' | ')}`
+          ? `Watching ${watching.length} open position(s) — no stops hit`
           : 'No open positions to monitor',
       data: JSON.stringify({ checked: openTrades.length, closed, watching, last_run: new Date().toISOString() }),
       updated_at: new Date().toISOString(),
