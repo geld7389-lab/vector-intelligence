@@ -46,13 +46,13 @@ function getInvalidationReason(
   // 2. Stop loss hit — structural invalidation
   if (isBull && price < setup.stop_loss) {
     return {
-      status: 'expired',
+      status: 'lost',
       reason: `SL hit — price ${price.toFixed(4)} breached stop ${setup.stop_loss} (OB/structure invalidated)`,
     };
   }
   if (!isBull && price > setup.stop_loss) {
     return {
-      status: 'expired',
+      status: 'lost',
       reason: `SL hit — price ${price.toFixed(4)} breached stop ${setup.stop_loss} (OB/structure invalidated)`,
     };
   }
@@ -60,13 +60,13 @@ function getInvalidationReason(
   // 3. Target / TP hit — filled
   if (isBull && price >= setup.target) {
     return {
-      status: 'filled',
+      status: 'won',
       reason: `TP reached — price ${price.toFixed(4)} hit target ${setup.target}`,
     };
   }
   if (!isBull && price <= setup.target) {
     return {
-      status: 'filled',
+      status: 'won',
       reason: `TP reached — price ${price.toFixed(4)} hit target ${setup.target}`,
     };
   }
@@ -110,6 +110,7 @@ export async function POST(_req: NextRequest) {
     const log: string[] = [];
     let updated = 0;
     let filled = 0;
+    let lost = 0;
     let expired = 0;
     let triggered = 0;
 
@@ -140,7 +141,8 @@ export async function POST(_req: NextRequest) {
 
       if (!updateErr) {
         updated++;
-        if (result.status === 'filled') filled++;
+        if (result.status === 'won') filled++;
+        else if (result.status === 'lost') lost++;
         else if (result.status === 'expired') expired++;
         else if (result.status === 'triggered') triggered++;
         log.push(`✓ ${setup.symbol} ${setup.direction} → ${result.status}: ${result.reason}`);
@@ -150,8 +152,8 @@ export async function POST(_req: NextRequest) {
     }
 
     return NextResponse.json({
-      message: `Monitored ${setups.length} setups → ${updated} updated (${filled} filled, ${expired} expired, ${triggered} triggered)`,
-      updated, filled, expired, triggered,
+      message: `Monitored ${setups.length} setups → ${updated} updated (${filled} won, ${lost} lost, ${expired} expired, ${triggered} triggered)`,
+      updated, filled, lost, expired, triggered,
       checked: setups.length,
       prices: symbolPrices,
       log,

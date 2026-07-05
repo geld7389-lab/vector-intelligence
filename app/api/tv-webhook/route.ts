@@ -8,7 +8,7 @@ const sb = createClient(
 );
 
 // TradingView webhook receiver
-// In TradingView: set alert webhook URL to https://vector-intelligence-alpha.vercel.app/api/tv-webhook
+// In TradingView: set alert webhook URL to https://vector-intelligence-five.vercel.app/api/tv-webhook
 // Alert message JSON format:
 // {"symbol":"NQ1!","timeframe":"15","direction":"bull","setup_type":"FVG Retest","entry_low":21000,"entry_high":21050,"stop_loss":20900,"target":21300,"htf_bias":"bullish","note":"SSL swept, in discount, CISD pending"}
 
@@ -77,7 +77,7 @@ export async function POST(req: NextRequest) {
 // GET — return webhook URL instructions
 export async function GET() {
   return NextResponse.json({
-    webhook_url: 'https://vector-intelligence-alpha.vercel.app/api/tv-webhook',
+    webhook_url: 'https://vector-intelligence-five.vercel.app/api/tv-webhook',
     method: 'POST',
     content_type: 'application/json',
     example_payload: {
