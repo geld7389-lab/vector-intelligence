@@ -92,17 +92,23 @@ export async function POST() {
 
     const orphaned: any[] = [];
     const stillOpenTrades: any[] = [];
+    const errors: any[] = [];
     if (livePositionTickets) {
       for (const trade of openTrades) {
         const ticketMatch = trade.notes?.match(/Ticket:\s*(\d+)/);
         const ticket = ticketMatch?.[1];
         if (ticket && !livePositionTickets.has(ticket)) {
           // Position no longer exists on the broker — mark closed so we stop watching it
-          await sb.from('trades').update({
+          const upd = await sb.from('trades').update({
             result: 'closed_external',
             notes: (trade.notes ?? '') + ` | Closed outside app (not found in live MT5 positions) @ ${new Date().toISOString()}`,
           }).eq('id', trade.id);
-          orphaned.push({ symbol: trade.symbol, ticket });
+          if (upd.error) {
+            errors.push({ id: trade.id, symbol: trade.symbol, action: 'orphan_close', error: upd.error.message });
+            stillOpenTrades.push(trade); // couldn't close it — don't lose track of it
+          } else {
+            orphaned.push({ symbol: trade.symbol, ticket });
+          }
         } else {
           stillOpenTrades.push(trade);
         }
@@ -126,7 +132,6 @@ export async function POST() {
 
     const closed: any[] = [];
     const watching: any[] = [];
-    const errors: any[] = [];
 
     for (const trade of stillOpenTrades) {
       // Extract MT5 ticket from notes field: "... | Ticket: 59201089 | ..."
@@ -153,11 +158,12 @@ export async function POST() {
           : (Number(trade.entry_price) - closePrice);
 
         // Update trade record in Supabase
-        await sb.from('trades').update({
+        const upd = await sb.from('trades').update({
           result: slHit ? 'loss' : 'win',
           exit_price: closePrice,
           notes: (trade.notes ?? '') + ` | ${reason} @ ${closePrice} | Auto-closed by monitor`,
         }).eq('id', trade.id);
+        if (upd.error) errors.push({ id: trade.id, symbol: trade.symbol, action: 'tp_sl_close', error: upd.error.message });
 
         closed.push({
           symbol: trade.symbol,

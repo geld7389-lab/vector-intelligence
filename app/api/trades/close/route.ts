@@ -25,15 +25,17 @@ export async function POST(req: Request) {
     try { result = JSON.parse(text); } catch { result = { raw: text }; }
 
     // Mark as closed in Supabase if we have the trade id
+    let dbError: string | null = null;
     if (tradeId) {
-      await sb.from('trades').update({
+      const upd = await sb.from('trades').update({
         result: 'closed_manual',
         exit_price: result?.closePrice ?? null,
         notes: `Manually closed by user @ ${new Date().toISOString()}`,
       }).eq('id', tradeId);
+      dbError = upd.error?.message ?? null;
     }
 
-    return NextResponse.json({ ok: true, result });
+    return NextResponse.json({ ok: true, result, dbError });
   } catch (e: any) {
     return NextResponse.json({ ok: false, error: e.message }, { status: 500 });
   }
