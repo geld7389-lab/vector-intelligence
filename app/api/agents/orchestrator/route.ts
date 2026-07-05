@@ -127,7 +127,9 @@ export async function POST(req: NextRequest) {
         ? `✓ ${execResult.trades_executed} trade(s) executed — ${execResult.executed?.map((e:any)=>`${e.direction.toUpperCase()} ${e.symbol}`).join(', ')}`
         : execResult.blocked
           ? `Blocked: ${execResult.reason}`
-          : execResult.error ?? 'No trades to execute'
+          : execResult.failed?.length
+            ? `${execResult.failed.length} failed: ${execResult.failed.map((f:any)=>`${f.symbol} — ${f.reason}`).join(' | ')}`
+            : execResult.error ?? execResult.message ?? 'No trades to execute'
       : 'Error', execResult);
 
   // 8. Self-learning
