@@ -3,7 +3,7 @@ import { sb } from '../../../../lib/supabase';
 export const dynamic = 'force-dynamic';
 
 export async function POST() {
-  const { data: trades } = await sb.from('trades').select('*').eq('status','closed');
+  const { data: trades } = await sb.from('trades').select('*').in('result', ['win', 'loss', 'breakeven']);
   const all = trades ?? [];
 
   if (all.length === 0) {
