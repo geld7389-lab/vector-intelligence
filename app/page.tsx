@@ -425,12 +425,33 @@ function CloseTradeModal({ trade, onClose, onSaved, onJournal }: { trade: any; o
   const [notes, setNotes] = useState(trade.notes ?? '');
   const [mistakes, setMistakes] = useState<string[]>(trade.mistakes ?? []);
   const [saving, setSaving] = useState(false);
+  const [mt5Error, setMt5Error] = useState<string | null>(null);
   const toggle = (m: string) => setMistakes(p => p.includes(m) ? p.filter(x=>x!==m) : [...p, m]);
   const save = async () => {
     setSaving(true);
+    setMt5Error(null);
+    let localMt5Error: string | null = null;
+    // For agent-executed trades with a real MT5 ticket, close the ACTUAL broker
+    // position first — this modal was previously only updating the journal record,
+    // leaving the real position open and live on the account even after "closing" it here.
+    if (trade._isAgent && trade._ticket) {
+      try {
+        const cr = await fetch('/api/trades/close', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ticket: trade._ticket, tradeId: trade.id }),
+        });
+        const cd = await cr.json();
+        if (!cd?.ok) localMt5Error = cd?.error ?? 'Failed to close live MT5 position — journal updated, but the real position may still be open. Check MT5 directly.';
+      } catch (e: any) {
+        localMt5Error = 'Could not reach MT5 to close the position — journal updated, but the real position may still be open. Check MT5 directly.';
+      }
+      if (localMt5Error) setMt5Error(localMt5Error);
+    }
     const r = await fetch('/api/trades', { method: 'PATCH', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ id: trade.id, exit_price: parseFloat(exit), notes, mistakes }) });
     const d = await r.json();
-    setSaving(false); onSaved(); onClose();
+    setSaving(false); onSaved();
+    if (!localMt5Error) onClose();
     if (onJournal) onJournal(d.trade);
   };
   const isBull = trade.direction === 'bull' || trade.direction === 'long';
@@ -443,6 +464,16 @@ function CloseTradeModal({ trade, onClose, onSaved, onJournal }: { trade: any; o
           <span className="text-sm font-bold text-white">Close Trade — {trade.symbol}</span>
           <button onClick={onClose} className="text-zinc-600 hover:text-zinc-400">✕</button>
         </div>
+        {trade._isAgent && trade._ticket && (
+          <div className="mb-3 text-[11px] text-amber-400 bg-amber-950/30 border border-amber-900/50 rounded-lg px-3 py-2">
+            This will close the LIVE MT5 position #{trade._ticket}, not just the journal entry.
+          </div>
+        )}
+        {mt5Error && (
+          <div className="mb-3 text-[11px] text-red-400 bg-red-950/30 border border-red-900/50 rounded-lg px-3 py-2">
+            ⚠ {mt5Error}
+          </div>
+        )}
         <div className="space-y-3">
           <div>
             <label className="text-xs text-zinc-600 block mb-1">Exit Price</label>
@@ -875,6 +906,7 @@ function TradesTab({ onNew, onJournal }: { onNew?: () => void; onJournal?: (t:an
       {open.map(t => {
         const isAgent = t.notes?.includes('Agent execution');
         const ticket = t.notes?.match(/Ticket: ([^\s|]+)/)?.[1];
+        const tradeWithMeta = { ...t, _isAgent: isAgent, _ticket: ticket };
         return (
         <div key={t.id} className="rounded-xl border border-zinc-800/60 bg-zinc-900/40 p-3">
           <div className="flex justify-between items-start">
@@ -887,7 +919,7 @@ function TradesTab({ onNew, onJournal }: { onNew?: () => void; onJournal?: (t:an
               {ticket && <span className="text-[10px] text-zinc-600 font-mono">#{ticket}</span>}
             </div>
             <div className="flex gap-2">
-              <button onClick={()=>setClosing(t)} className="text-xs px-2 py-1 rounded bg-zinc-700 hover:bg-zinc-600 text-zinc-300">Close</button>
+              <button onClick={()=>setClosing(tradeWithMeta)} className="text-xs px-2 py-1 rounded bg-zinc-700 hover:bg-zinc-600 text-zinc-300">Close</button>
               <button onClick={()=>del(t.id)} className="text-xs text-zinc-700 hover:text-red-400">✕</button>
             </div>
           </div>
@@ -1653,32 +1685,6 @@ function AgentsTab() {
           </div>
         );
       })()}
-
-      {false && (data?.approved_trades?.length ?? 0) > 0 && (
-        <div className="rounded-xl border border-emerald-800/40 bg-emerald-900/10 p-4">
-          <div className="text-[10px] text-emerald-600 uppercase tracking-wider mb-3">✓ AI-Approved Setups (Score ≥7)</div>
-          <div className="space-y-3">
-            {data.approved_trades.map((t: any, i: number) => (
-              <div key={i} className="rounded-lg border border-zinc-800 bg-zinc-950 p-3 text-xs space-y-1">
-                <div className="flex items-center gap-2">
-                  <span className="font-bold text-zinc-100">{t.symbol}</span>
-                  <span className={cx('px-2 py-0.5 rounded text-[10px] font-bold', t.direction==='buy'?'bg-emerald-900/60 text-emerald-400':'bg-red-900/60 text-red-400')}>
-                    {t.direction?.toUpperCase()}
-                  </span>
-                  <span className="px-2 py-0.5 rounded bg-zinc-800 text-zinc-200 text-[10px] font-bold">{t.setup_score}/10</span>
-                  <span className="text-zinc-500">{t.confidence}</span>
-                </div>
-                <div className="text-zinc-400">{t.primary_reason}</div>
-                <div className="flex gap-4 text-zinc-600">
-                  <span>Entry: {t.entry_zone}</span>
-                  <span>Target: {t.target}</span>
-                </div>
-                <div className="text-zinc-700">Invalidation: {t.invalidation}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
 
       {/* MARKET BIAS */}
       {Object.keys(data?.biases ?? {}).length > 0 && (
