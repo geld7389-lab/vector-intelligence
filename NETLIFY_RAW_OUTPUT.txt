@@ -111,7 +111,7 @@ Route (app)                              Size     First Load JS
 ƒ  (Dynamic)  server-rendered on demand
 
 ​
-(build.command completed in 18.3s)
+(build.command completed in 32s)
 ​
 Functions bundling                                            
 ────────────────────────────────────────────────────────────────
@@ -120,71 +120,86 @@ Packaging Functions from .netlify/functions-internal directory:
  - ___netlify-server-handler/___netlify-server-handler.mjs
 ​
 ​
-(Functions bundling completed in 904ms)
+(Functions bundling completed in 1.3s)
 Deploy path:        /home/runner/work/vector-intelligence/vector-intelligence/.next
 Configuration path: /home/runner/work/vector-intelligence/vector-intelligence/netlify.toml
 Deploying to main site URL...
-- Uploading blobs to deploy store...
+ ›   Warning: JSONHTTPError:  403
+ ›   Warning: 
+{
+  "name": "JSONHTTPError",
+  "status": 403,
+  "json": {
+    "error": "Account credit usage exceeded - new deploys are blocked until credits are added"
+  }
+}
 
 ​
-Netlify Build                                                 
+Internal error during "options.onPostBuild"                   
 ────────────────────────────────────────────────────────────────
 ​
-❯ Version
-  @netlify/build 29.58.0
+  Error message
+  JSONHTTPError: Forbidden
 ​
-❯ Flags
-  auth: nfp_XTqFy1PBLJTvEUnoJ5xsuKXb792ggU1Q7d8a
-  build: true
-  deployId: 6a4951cca67d2a2b23f6283d
-  open: false
-  prod: true
-  prodIfUnlocked: false
-  site: dbcaa8a5-bee5-46b0-bee0-97537ed10127
-  skipFunctionsCache: false
+  Error location
+  During options.onPostBuild
+      at parseResponse (file:///opt/hostedtoolcache/node/20.20.2/x64/lib/node_modules/netlify-cli/node_modules/netlify/lib/methods/response.js:10:39)
+      at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+      at async callMethod (file:///opt/hostedtoolcache/node/20.20.2/x64/lib/node_modules/netlify-cli/node_modules/netlify/lib/methods/index.js:26:28)
+      at async runDeploy (file:///opt/hostedtoolcache/node/20.20.2/x64/lib/node_modules/netlify-cli/dist/commands/deploy/deploy.js:356:19)
+      at async prepAndRunDeploy (file:///opt/hostedtoolcache/node/20.20.2/x64/lib/node_modules/netlify-cli/dist/commands/deploy/deploy.js:603:21)
+      at async deployHandler (file:///opt/hostedtoolcache/node/20.20.2/x64/lib/node_modules/netlify-cli/dist/commands/deploy/deploy.js:688:27)
+      at async fireCoreStep (file:///opt/hostedtoolcache/node/20.20.2/x64/lib/node_modules/netlify-cli/node_modules/@netlify/build/lib/steps/core_step.js:11:98)
+      at async tFireStep (file:///opt/hostedtoolcache/node/20.20.2/x64/lib/node_modules/netlify-cli/node_modules/@netlify/build/lib/time/main.js:18:63)
+      at async file:///opt/hostedtoolcache/node/20.20.2/x64/lib/node_modules/netlify-cli/node_modules/@netlify/build/lib/steps/run_step.js:69:283
+      at async pReduce.index (file:///opt/hostedtoolcache/node/20.20.2/x64/lib/node_modules/netlify-cli/node_modules/@netlify/build/lib/steps/run_steps.js:12:349)
 ​
-❯ Current directory
-  /home/runner/work/vector-intelligence/vector-intelligence
+  Error properties
+  {
+    name: [32m'JSONHTTPError'[39m,
+    status: [33m403[39m,
+    json: {
+      error: [32m'Account credit usage exceeded - new deploys are blocked until credits are added'[39m
+    }
+  }
 ​
-❯ Config file
-  /home/runner/work/vector-intelligence/vector-intelligence/netlify.toml
-​
-❯ Context
-  dev
-​
-Uploading blobs to deploy store                               
-────────────────────────────────────────────────────────────────
-​
-​
-(Uploading blobs completed in 542ms)
-✔ Finished uploading blobs to deploy store
-- Hashing files...
-- Looking for a functions cache...
-✔ Deploying functions from cache (use --skip-functions-cache to override)
-✔ Finished hashing 18 files, 1 functions and edge functions
-- CDN diffing files...
-✔ CDN requesting 0 files and 1 functions
-- Uploading 1 files
-✔ Finished uploading 1 assets
-- Waiting for deploy to go live...
-✔ Deploy is live!
-(node:2320) MaxListenersExceededWarning: Possible EventEmitter memory leak detected. 11 unpipe listeners added to [Socket]. MaxListeners is 10. Use emitter.setMaxListeners() to increase limit
-(Use `node --trace-warnings ...` to show where the warning was created)
-(node:2320) MaxListenersExceededWarning: Possible EventEmitter memory leak detected. 11 error listeners added to [Socket]. MaxListeners is 10. Use emitter.setMaxListeners() to increase limit
-(node:2320) MaxListenersExceededWarning: Possible EventEmitter memory leak detected. 11 close listeners added to [Socket]. MaxListeners is 10. Use emitter.setMaxListeners() to increase limit
-(node:2320) MaxListenersExceededWarning: Possible EventEmitter memory leak detected. 11 finish listeners added to [Socket]. MaxListeners is 10. Use emitter.setMaxListeners() to increase limit
-(node:2320) MaxListenersExceededWarning: Possible EventEmitter memory leak detected. 11 unpipe listeners added to [Socket]. MaxListeners is 10. Use emitter.setMaxListeners() to increase limit
-(node:2320) MaxListenersExceededWarning: Possible EventEmitter memory leak detected. 11 error listeners added to [Socket]. MaxListeners is 10. Use emitter.setMaxListeners() to increase limit
-(node:2320) MaxListenersExceededWarning: Possible EventEmitter memory leak detected. 11 close listeners added to [Socket]. MaxListeners is 10. Use emitter.setMaxListeners() to increase limit
-(node:2320) MaxListenersExceededWarning: Possible EventEmitter memory leak detected. 11 finish listeners added to [Socket]. MaxListeners is 10. Use emitter.setMaxListeners() to increase limit
-​
-Netlify Build Complete                                        
-────────────────────────────────────────────────────────────────
-​
-(Netlify Build completed in 41s)
-
-Build logs:         https://app.netlify.com/projects/vector-intelligence-prod/deploys/6a4951cca67d2a2b23f6283d
-Function logs:      https://app.netlify.com/projects/vector-intelligence-prod/logs/functions
-Edge function Logs: https://app.netlify.com/projects/vector-intelligence-prod/logs/edge-functions
-Unique deploy URL:  https://6a4951cca67d2a2b23f6283d--vector-intelligence-prod.netlify.app
-Website URL:        https://vector-intelligence-prod.netlify.app
+  Resolved config
+  build:
+    command: npm run build
+    commandOrigin: config
+    environment:
+      - NEXT_PUBLIC_SUPABASE_URL
+      - NEXT_PUBLIC_SUPABASE_ANON_KEY
+      - GROQ_API_KEY
+      - NODE_VERSION
+      - NPM_FLAGS
+    publish: /home/runner/work/vector-intelligence/vector-intelligence/.next
+    publishOrigin: config
+  functions:
+    '*':
+      node_bundler: esbuild
+  headers:
+    - for: /_next/static/*
+      values:
+        Cache-Control: public, max-age=31536000, immutable
+  headersOrigin: inline
+  plugins:
+    - inputs: {}
+      origin: config
+      package: '@netlify/plugin-nextjs'
+  redirects:
+    - from: /_next/image
+      query:
+        q: ':quality'
+        url: ':url'
+        w: ':width'
+      status: 200
+      to: /.netlify/images?url=:url&w=:width&q=:quality
+    - from: /_ipx/*
+      query:
+        q: ':quality'
+        url: ':url'
+        w: ':width'
+      status: 200
+      to: /.netlify/images?url=:url&w=:width&q=:quality
+  redirectsOrigin: inline
