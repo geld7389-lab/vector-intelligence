@@ -8,7 +8,7 @@ export async function GET(req: NextRequest) {
     const yahooMap: Record<string,string> = {
       NQ:'NQ=F', ES:'ES=F', GC:'GC=F', CL:'CL=F',
       BTC:'BTC-USD', ETH:'ETH-USD', SOL:'SOL-USD',
-      EURUSD:'EURUSD=X', GBPUSD:'GBPUSD=X',
+      EURUSD:'EURUSD=X', GBPUSD:'GBPUSD=X', USDJPY:'USDJPY=X',
       SPY:'SPY', QQQ:'QQQ', NVDA:'NVDA',
     };
     const ySym = yahooMap[symbol] ?? `${symbol}=F`;
