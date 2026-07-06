@@ -1505,8 +1505,8 @@ function AgentsTab() {
     } catch {}
     setClosingTicket(null);
   };
-  const dotColor = (s: string) => s==='running'?'bg-emerald-500 animate-pulse':s==='paused'?'bg-yellow-500 animate-pulse':s==='idle'?'bg-zinc-600':'bg-zinc-700';
-  const textColor = (s: string) => s==='running'?'text-emerald-400':s==='paused'?'text-yellow-400':'text-zinc-600';
+  const dotClass = (s: string) => s==='running'?'dot-live':s==='paused'?'dot-warn':'dot-idle';
+  const textColor = (s: string) => s==='running'?{color:'var(--green-2)'}:s==='paused'?{color:'var(--amber-2)'}:{color:'var(--muted)'};
 
   return (
     <div className="space-y-4">
@@ -1545,10 +1545,10 @@ function AgentsTab() {
       )}
 
       {/* AGENT STATUS GRID */}
-      <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4">
-        <div className="text-[10px] text-zinc-600 uppercase tracking-wider mb-3">Agent Status</div>
+      <div className="card">
+        <div className="label" style={{marginBottom:12}}>Agent Status</div>
         {loading ? (
-          <div className="text-xs text-zinc-600 py-4">Loading...</div>
+          <div className="text-xs py-4" style={{color:'var(--muted)'}}>Loading...</div>
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
             {AGENT_DEFS.map(a => {
@@ -1564,14 +1564,14 @@ function AgentsTab() {
                 }
               }
               return (
-                <div key={a.key} className="rounded-lg border border-zinc-800 bg-zinc-950 p-3 space-y-1.5">
+                <div key={a.key} className="rounded-lg p-3 space-y-1.5" style={{background:'var(--bg-3)', border:'1px solid var(--border)'}}>
                   <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-bold text-zinc-500 font-mono tracking-wider">{a.icon}</span>
-                    <div className={cx('w-2 h-2 rounded-full', dotColor(s.status))}/>
+                    <span className="mono" style={{fontSize:10, fontWeight:700, color:'var(--muted)', letterSpacing:'0.05em'}}>{a.icon}</span>
+                    <div className={dotClass(s.status)}/>
                   </div>
-                  <div className="text-[11px] font-semibold text-zinc-200">{a.name}</div>
-                  <div className={cx('text-[10px]', textColor(s.status))}>{s.status}</div>
-                  <div className="text-[10px] text-zinc-600 line-clamp-2">{displayText}</div>
+                  <div style={{fontSize:11, fontWeight:600, color:'var(--text)'}}>{a.name}</div>
+                  <div style={{fontSize:10, ...textColor(s.status)}}>{s.status}</div>
+                  <div className="line-clamp-2" style={{fontSize:10, color:'var(--muted)'}}>{displayText}</div>
                 </div>
               );
             })}
@@ -1598,24 +1598,25 @@ function AgentsTab() {
         return (
           <div className="space-y-4">
             {activeTrades.length > 0 && (
-              <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4">
-                <div className="text-[10px] text-zinc-600 uppercase tracking-wider mb-3">Active Trades — Entry / SL / TP</div>
+              <div className="card">
+                <div className="label" style={{marginBottom:12}}>Active Trades — Entry / SL / TP</div>
                 <div className="space-y-4">
                   {activeTrades.map((t: any, i: number) => {
                     const key = String(t.ticket ?? i);
                     const isCollapsed = collapsedTrades[key];
+                    const isBuy = t.direction === 'buy';
                     return (
-                      <div key={key} className="rounded-lg border border-zinc-800 bg-zinc-950 p-3">
+                      <div key={key} className="rounded-lg p-3" style={{background:'var(--bg-3)', border:'1px solid var(--border)', borderLeft:`2px solid ${isBuy?'var(--green-2)':'var(--red-2)'}`}}>
                         <div className="flex items-center gap-2 mb-1 text-xs">
-                          <span className="font-bold text-zinc-100">{t.symbol}</span>
-                          <span className={cx('px-2 py-0.5 rounded text-[10px] font-bold', t.direction==='buy'?'bg-emerald-900/60 text-emerald-400':'bg-red-900/60 text-red-400')}>
+                          <span style={{fontWeight:700, color:'var(--text)'}}>{t.symbol}</span>
+                          <span className={cx('badge', isBuy?'badge-green':'badge-red')} style={{fontSize:10}}>
                             {t.direction?.toUpperCase()}
                           </span>
-                          {t.ticket && <span className="text-zinc-600 font-mono">#{t.ticket}</span>}
-                          {t.currentPrice != null && <span className="text-zinc-500 ml-auto">now {t.currentPrice}</span>}
+                          {t.ticket && <span className="mono" style={{color:'var(--muted)'}}>#{t.ticket}</span>}
+                          {t.currentPrice != null && <span className="ml-auto" style={{color:'var(--text-2)'}}>now {t.currentPrice}</span>}
                           <button
                             onClick={() => setCollapsedTrades(p => ({ ...p, [key]: !p[key] }))}
-                            className="text-zinc-500 hover:text-zinc-300 px-1.5 py-0.5 rounded border border-zinc-800"
+                            className="btn btn-ghost btn-xs"
                             title={isCollapsed ? 'Show chart' : 'Hide chart'}
                           >
                             {isCollapsed ? '▸' : '▾'}
@@ -1623,7 +1624,7 @@ function AgentsTab() {
                           <button
                             onClick={() => closeTrade(t.ticket, t.id)}
                             disabled={closingTicket === t.ticket}
-                            className="text-red-400 hover:text-red-300 px-1.5 py-0.5 rounded border border-red-900/50 disabled:opacity-40"
+                            className="btn btn-danger btn-xs"
                             title="Close this position"
                           >
                             {closingTicket === t.ticket ? '…' : '✕'}
@@ -1647,35 +1648,36 @@ function AgentsTab() {
             )}
 
             {approvedSetups.length > 0 && (
-              <div className="rounded-xl border border-emerald-800/40 bg-emerald-900/10 p-4">
-                <div className="text-[10px] text-emerald-600 uppercase tracking-wider mb-3">✓ AI-Approved Setups (Score ≥7)</div>
+              <div className="card" style={{borderColor:'rgba(34,197,94,0.25)', background:'rgba(34,197,94,0.03)'}}>
+                <div className="label" style={{marginBottom:12, color:'var(--green-2)'}}>✓ AI-Approved Setups (Score ≥7)</div>
                 <div className="space-y-3">
                   {(data.approved_trades as any[]).map((t: any, i: number) => {
                     const dismissKey = `${t.symbol}-${t.direction}-${i}`;
                     if (dismissedSetups[dismissKey]) return null;
+                    const isBuy = t.direction === 'buy';
                     return (
-                      <div key={i} className="rounded-lg border border-zinc-800 bg-zinc-950 p-3 text-xs space-y-1">
+                      <div key={i} className="rounded-lg p-3 text-xs space-y-1" style={{background:'var(--bg-3)', border:'1px solid var(--border)', borderLeft:`2px solid ${isBuy?'var(--green-2)':'var(--red-2)'}`}}>
                         <div className="flex items-center gap-2">
-                          <span className="font-bold text-zinc-100">{t.symbol}</span>
-                          <span className={cx('px-2 py-0.5 rounded text-[10px] font-bold', t.direction==='buy'?'bg-emerald-900/60 text-emerald-400':'bg-red-900/60 text-red-400')}>
+                          <span style={{fontWeight:700, color:'var(--text)'}}>{t.symbol}</span>
+                          <span className={cx('badge', isBuy?'badge-green':'badge-red')} style={{fontSize:10}}>
                             {t.direction?.toUpperCase()}
                           </span>
-                          <span className="px-2 py-0.5 rounded bg-zinc-800 text-zinc-200 text-[10px] font-bold">{t.setup_score}/10</span>
-                          <span className="text-zinc-500">{t.confidence}</span>
+                          <span className="badge badge-gray" style={{fontSize:10, fontWeight:700}}>{t.setup_score}/10</span>
+                          <span style={{color:'var(--text-2)'}}>{t.confidence}</span>
                           <button
                             onClick={() => setDismissedSetups(p => ({ ...p, [dismissKey]: true }))}
-                            className="ml-auto text-zinc-500 hover:text-red-400 px-1.5 py-0.5 rounded border border-zinc-800"
+                            className="btn btn-ghost btn-xs ml-auto"
                             title="Dismiss this setup"
                           >
                             ✕
                           </button>
                         </div>
-                        <div className="text-zinc-400">{t.primary_reason}</div>
-                        <div className="flex gap-4 text-zinc-600">
+                        <div style={{color:'var(--text-2)'}}>{t.primary_reason}</div>
+                        <div className="flex gap-4" style={{color:'var(--muted)'}}>
                           <span>Entry: {t.entry_zone}</span>
                           <span>Target: {t.target}</span>
                         </div>
-                        <div className="text-zinc-700">Invalidation: {t.invalidation}</div>
+                        <div style={{color:'var(--muted)', opacity:0.7}}>Invalidation: {t.invalidation}</div>
                       </div>
                     );
                   })}
