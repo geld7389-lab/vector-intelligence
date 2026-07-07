@@ -50,12 +50,36 @@ async function closePosition(token: string, ticket: string): Promise<any> {
 
 export async function POST() {
   try {
-    // Get MT5 token
+    // Get MT5 session/credentials from Supabase
     const { data: mt5Session } = await sb.from('agent_status').select('data').eq('agent', 'mt5_session').single();
     const rawData = mt5Session?.data;
     const sessionData = typeof rawData === 'string' ? JSON.parse(rawData) : rawData;
-    const token = sessionData?.token;
-    if (!token) return NextResponse.json({ ok: true, skipped: 'no MT5 token', checked: 0 });
+    if (!sessionData?.token && !sessionData?.login) return NextResponse.json({ ok: true, skipped: 'no MT5 token', checked: 0 });
+
+    // Always reconnect fresh before checking positions — a stale/expired token doesn't
+    // throw an error from mtapi.io, it silently returns an object instead of an array,
+    // which was previously misread as "zero live positions" and caused REAL open trades
+    // to be incorrectly marked closed_external. Reconnecting fresh (same pattern as the
+    // executor) avoids trusting a cached token that might already be dead.
+    let token = sessionData?.token;
+    if (sessionData?.login && sessionData?.password && sessionData?.server) {
+      try {
+        const reconnectUrl = `${MT5_BASE}/ConnectEx?user=${sessionData.login}&password=${encodeURIComponent(sessionData.password)}&server=${encodeURIComponent(sessionData.server)}&connectTimeoutSeconds=20&connectTimeoutClusterMemberSeconds=10&errorReplyStatusCode=201`;
+        const rr = await fetch(reconnectUrl, { headers: { accept: 'text/plain' }, signal: AbortSignal.timeout(25000) });
+        const newToken = (await rr.text()).replace(/"/g, '').trim();
+        if (newToken && newToken.length > 10 && !newToken.includes('error') && !newToken.includes('message')) {
+          token = newToken;
+          await sb.from('agent_status').upsert({
+            agent: 'mt5_session',
+            status: 'connected',
+            last_action: `Auto-reconnected to ${sessionData.server} (monitor)`,
+            data: JSON.stringify({ ...sessionData, token: newToken, connected_at: new Date().toISOString() }),
+            updated_at: new Date().toISOString(),
+          }, { onConflict: 'agent' });
+        }
+      } catch {}
+    }
+    if (!token) return NextResponse.json({ ok: true, skipped: 'no MT5 token after reconnect attempt', checked: 0 });
 
     // Get all open trades from Supabase that were agent-executed (have stop_loss or take_profit set)
     const { data: openTrades } = await sb
@@ -71,7 +95,11 @@ export async function POST() {
     // on MT5 directly (outside this app), its Supabase row never gets updated and
     // the monitor would otherwise "watch" a phantom position forever, since price
     // may never naturally cross that trade's old SL/TP again.
-    let livePositionTickets = new Set<string>();
+    // IMPORTANT: livePositionTickets is `null` unless we get a CONFIRMED valid array
+    // back from the broker. An error object, empty response, or fetch failure must
+    // all skip the orphan-check rather than being treated as "zero live positions" —
+    // that distinction is exactly what caused real open trades to be wrongly closed.
+    let livePositionTickets: Set<string> | null = null;
     try {
       const posRes = await fetch(`${MT5_BASE}/OpenedOrders?id=${token}`, {
         headers: { accept: 'text/json' },
@@ -84,10 +112,10 @@ export async function POST() {
           positions.map((p: any) => String(p.ticket ?? p.Ticket ?? p.orderTicket ?? ''))
         );
       }
+      // else: got valid JSON but not an array (e.g. an error object like
+      // {"message":"...","code":"INVALID_TOKEN"}) — leave livePositionTickets as null
     } catch {
-      // If we can't reach MT5 at all, don't wipe out trades based on a failed fetch —
-      // skip the orphan-check this run rather than risk false-closing everything.
-      livePositionTickets = null as any;
+      // Fetch/parse genuinely failed — also leave as null
     }
 
     const orphaned: any[] = [];
@@ -208,4 +236,3 @@ export async function POST() {
   }
 }
 
-export const GET = POST;
