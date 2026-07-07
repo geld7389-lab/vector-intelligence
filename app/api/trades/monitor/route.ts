@@ -180,6 +180,24 @@ export async function POST() {
       if (slHit || tpHit) {
         const reason = slHit ? 'SL_HIT' : 'TP_HIT';
         const closeResult = await closePosition(token, ticket);
+        // Only treat this as a real close if the broker actually confirms it — an error
+        // object, missing ticket, or message field means OrderClose likely failed, and
+        // we must NOT mark the trade closed in our DB while it's still live on the broker.
+        const brokerConfirmedClose = closeResult
+          && !closeResult.error
+          && !closeResult.message
+          && (closeResult.ticket !== undefined || closeResult.closePrice !== undefined || closeResult.closeVolume !== undefined);
+
+        if (!brokerConfirmedClose) {
+          errors.push({ id: trade.id, symbol: trade.symbol, action: 'close_attempt_failed', error: JSON.stringify(closeResult) });
+          watching.push({
+            id: trade.id, symbol: trade.symbol, ticket,
+            direction: trade.direction, entry: Number(trade.entry_price),
+            sl, tp, currentPrice,
+          });
+          continue;
+        }
+
         const closePrice = closeResult?.closePrice || currentPrice;
         const profit = isLong
           ? (closePrice - Number(trade.entry_price))
@@ -236,4 +254,3 @@ export async function POST() {
   }
 }
 
-export const GET = POST;
