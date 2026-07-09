@@ -874,6 +874,21 @@ function TradesTab({ onNew, onJournal }: { onNew?: () => void; onJournal?: (t:an
     setTrades(d.trades ?? []);
   }, []);
   useEffect(() => { load(); }, [load]);
+  // Was fetch-once-on-mount only — the tab froze on whatever data existed the
+  // moment it was opened and never learned about trades closed in the background
+  // by the position monitor. Poll every 15s, and also refetch the instant the
+  // tab regains focus (covers the common case of switching tabs and back).
+  useEffect(() => {
+    const iv = setInterval(load, 15000);
+    const onFocus = () => load();
+    window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onFocus);
+    return () => {
+      clearInterval(iv);
+      window.removeEventListener('focus', onFocus);
+      document.removeEventListener('visibilitychange', onFocus);
+    };
+  }, [load]);
   const del = async (id: string) => { await fetch('/api/trades', { method:'DELETE', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ id }) }); load(); };
   const open = trades.filter(t => t.result === 'open');
   const closed = trades.filter(t => t.result !== 'open');
