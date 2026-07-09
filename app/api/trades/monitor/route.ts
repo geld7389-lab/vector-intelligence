@@ -48,13 +48,38 @@ async function closePosition(token: string, ticket: string): Promise<any> {
   }
 }
 
+// Heartbeat helper — MUST be called on every single exit path (early returns,
+// success, and the top-level catch). The whole reason this bug went undetected
+// for ~18 hours is that early returns and thrown exceptions skipped writing to
+// agent_status entirely, so a dead monitor looked identical to "nothing to do."
+async function heartbeat(status: string, last_action: string, data: any = null) {
+  try {
+    await sb.from('agent_status').upsert({
+      agent: 'position_monitor',
+      status,
+      last_action,
+      data: data ? JSON.stringify(data) : null,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'agent' });
+  } catch {
+    // Never let a heartbeat failure mask the real result being returned.
+  }
+}
+
+export async function GET() {
+  return POST();
+}
+
 export async function POST() {
   try {
     // Get MT5 session/credentials from Supabase
     const { data: mt5Session } = await sb.from('agent_status').select('data').eq('agent', 'mt5_session').single();
     const rawData = mt5Session?.data;
     const sessionData = typeof rawData === 'string' ? JSON.parse(rawData) : rawData;
-    if (!sessionData?.token && !sessionData?.login) return NextResponse.json({ ok: true, skipped: 'no MT5 token', checked: 0 });
+    if (!sessionData?.token && !sessionData?.login) {
+      await heartbeat('error', '⚠ Skipped: no MT5 token/login in agent_status', { checked: 0, last_run: new Date().toISOString() });
+      return NextResponse.json({ ok: true, skipped: 'no MT5 token', checked: 0 });
+    }
 
     // Always reconnect fresh before checking positions — a stale/expired token doesn't
     // throw an error from mtapi.io, it silently returns an object instead of an array,
@@ -79,7 +104,10 @@ export async function POST() {
         }
       } catch {}
     }
-    if (!token) return NextResponse.json({ ok: true, skipped: 'no MT5 token after reconnect attempt', checked: 0 });
+    if (!token) {
+      await heartbeat('error', '⚠ Skipped: reconnect attempt failed, no usable MT5 token', { checked: 0, last_run: new Date().toISOString() });
+      return NextResponse.json({ ok: true, skipped: 'no MT5 token after reconnect attempt', checked: 0 });
+    }
 
     // Get all open trades from Supabase that were agent-executed (have stop_loss or take_profit set)
     const { data: openTrades } = await sb
@@ -89,7 +117,10 @@ export async function POST() {
       .not('stop_loss', 'is', null)
       .not('take_profit', 'is', null);
 
-    if (!openTrades?.length) return NextResponse.json({ ok: true, checked: 0, closed: [] });
+    if (!openTrades?.length) {
+      await heartbeat('running', 'No open trades to monitor', { checked: 0, closed: [], last_run: new Date().toISOString() });
+      return NextResponse.json({ ok: true, checked: 0, closed: [] });
+    }
 
     // Cross-check against REAL live MT5 positions. If a trade was closed manually
     // on MT5 directly (outside this app), its Supabase row never gets updated and
@@ -250,6 +281,7 @@ export async function POST() {
 
     return NextResponse.json({ ok: true, checked: stillOpenTrades.length, closed, watching, orphaned, errors });
   } catch (e: any) {
+    await heartbeat('error', `⚠ Monitor crashed: ${e.message}`, { checked: 0, last_run: new Date().toISOString() });
     return NextResponse.json({ ok: false, error: e.message }, { status: 500 });
   }
 }

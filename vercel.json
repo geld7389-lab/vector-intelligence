@@ -3,5 +3,11 @@
     "NEXT_PUBLIC_SUPABASE_URL": "https://xavkbjbgmuasfkliptsh.supabase.co",
     "NEXT_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhhdmtiamJnbXVhc2ZrbGlwdHNoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzgzNTAzOTIsImV4cCI6MjA5MzkyNjM5Mn0.GJgxNwP6LfphbHTijGhrHK5DMpDcarJin2bVmoxU4bo",
     "GROQ_API_KEY": "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"
-  }
+  },
+  "crons": [
+    {
+      "path": "/api/trades/monitor",
+      "schedule": "*/5 * * * *"
+    }
+  ]
 }
