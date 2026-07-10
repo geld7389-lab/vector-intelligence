@@ -131,6 +131,7 @@ export async function POST() {
     // all skip the orphan-check rather than being treated as "zero live positions" —
     // that distinction is exactly what caused real open trades to be wrongly closed.
     let livePositionTickets: Set<string> | null = null;
+    const brokerPriceByTicket = new Map<string, number>();
     try {
       const posRes = await fetch(`${MT5_BASE}/OpenedOrders?id=${token}`, {
         headers: { accept: 'text/json' },
@@ -142,6 +143,18 @@ export async function POST() {
         livePositionTickets = new Set(
           positions.map((p: any) => String(p.ticket ?? p.Ticket ?? p.orderTicket ?? ''))
         );
+        // mtapi.io's OpenedOrders response includes `closePrice` on still-open
+        // positions — despite the name, this IS the current live broker price
+        // (verified: profit = (closePrice - openPrice) * lots * contractSize
+        // matches exactly). This is the REAL price the broker will actually
+        // fill against, not an approximation from a different market (Yahoo
+        // futures vs. broker spot/CFD can genuinely diverge by real dollars,
+        // which previously caused false TP/SL triggers on brand-new trades).
+        for (const p of positions) {
+          const t = String(p.ticket ?? p.Ticket ?? p.orderTicket ?? '');
+          const cp = Number(p.closePrice);
+          if (t && Number.isFinite(cp) && cp > 0) brokerPriceByTicket.set(t, cp);
+        }
       }
       // else: got valid JSON but not an array (e.g. an error object like
       // {"message":"...","code":"INVALID_TOKEN"}) — leave livePositionTickets as null
@@ -198,8 +211,10 @@ export async function POST() {
       if (!ticketMatch) continue;
       const ticket = ticketMatch[1];
 
-      const currentPrice = await getPrice(trade.symbol);
+      const brokerPrice = brokerPriceByTicket.get(ticket);
+      const currentPrice = brokerPrice ?? await getPrice(trade.symbol);
       if (!currentPrice) continue;
+      const priceSource = brokerPrice ? 'broker' : 'yahoo_fallback';
 
       const sl = Number(trade.stop_loss);
       const tp = Number(trade.take_profit);
@@ -238,7 +253,7 @@ export async function POST() {
         const upd = await sb.from('trades').update({
           result: slHit ? 'loss' : 'win',
           exit_price: closePrice,
-          notes: (trade.notes ?? '') + ` | ${reason} @ ${closePrice} | Auto-closed by monitor`,
+          notes: (trade.notes ?? '') + ` | ${reason} @ ${closePrice} (decided via ${priceSource} price ${currentPrice}) | Auto-closed by monitor`,
         }).eq('id', trade.id);
         if (upd.error) errors.push({ id: trade.id, symbol: trade.symbol, action: 'tp_sl_close', error: upd.error.message });
 
@@ -250,6 +265,7 @@ export async function POST() {
           exit: closePrice,
           sl, tp,
           currentPrice,
+          priceSource,
         });
       } else {
         watching.push({
