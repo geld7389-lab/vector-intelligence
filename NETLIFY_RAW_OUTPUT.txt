@@ -40,11 +40,11 @@ $ npm run build
    Linting and checking validity of types ...
    Collecting page data ...
  ⚠ Using edge runtime on a page currently disables static generation for that page
-   Generating static pages (0/8) ...
-   Generating static pages (2/8) 
-   Generating static pages (4/8) 
-   Generating static pages (6/8) 
- ✓ Generating static pages (8/8)
+   Generating static pages (0/9) ...
+   Generating static pages (2/9) 
+   Generating static pages (4/9) 
+   Generating static pages (6/9) 
+ ✓ Generating static pages (9/9)
    Finalizing page optimization ...
    Collecting build traces ...
 
@@ -72,6 +72,7 @@ Route (app)                              Size     First Load JS
 ├ ƒ /api/candles                         0 B                0 B
 ├ ƒ /api/cot                             0 B                0 B
 ├ ƒ /api/crypto                          0 B                0 B
+├ ○ /api/debug/opened-orders             0 B                0 B
 ├ ƒ /api/deepbacktest                    0 B                0 B
 ├ ƒ /api/drawings                        0 B                0 B
 ├ ƒ /api/forex                           0 B                0 B
@@ -112,7 +113,7 @@ Route (app)                              Size     First Load JS
 ƒ  (Dynamic)  server-rendered on demand
 
 ​
-(build.command completed in 32.2s)
+(build.command completed in 32.8s)
 ​
 Functions bundling                                            
 ────────────────────────────────────────────────────────────────
