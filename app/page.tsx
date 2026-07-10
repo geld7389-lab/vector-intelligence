@@ -82,8 +82,8 @@ function PriceRow({ symbol, price, change, changePct, history, currency = '' }: 
 }
 
 // ── MINI CANDLE CHART ──────────────────────────
-function CandleChart({ symbol, timeframe, entry_low, entry_high, stop_loss, target }: {
-  symbol: string; timeframe: string; entry_low: number; entry_high: number; stop_loss: number; target: number;
+function CandleChart({ symbol, timeframe, entry_low, entry_high, stop_loss, target, livePrice }: {
+  symbol: string; timeframe: string; entry_low: number; entry_high: number; stop_loss: number; target: number; livePrice?: number;
 }) {
   const [candles, setCandles] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -107,7 +107,11 @@ function CandleChart({ symbol, timeframe, entry_low, entry_high, stop_loss, targ
     ctx.clearRect(0, 0, W, H);
 
     const last = candles.slice(-60);
-    const allPrices = last.flatMap(c => [c.h, c.l, entry_low, entry_high, stop_loss, target]);
+    // NOTE: candle wicks come from Yahoo Finance (often a *futures* feed, e.g. GC=F)
+    // while stop_loss/target/livePrice come from the actual broker (spot/CFD, e.g. XAUUSD).
+    // These two feeds can genuinely disagree by real dollars for commodities — that's why
+    // livePrice is drawn as its own explicit line rather than assumed to match the candles.
+    const allPrices = [...last.flatMap(c => [c.h, c.l]), entry_low, entry_high, stop_loss, target, ...(livePrice != null ? [livePrice] : [])];
     const minP = Math.min(...allPrices), maxP = Math.max(...allPrices);
     const range = maxP - minP || 1;
     const pad = 8;
@@ -143,7 +147,20 @@ function CandleChart({ symbol, timeframe, entry_low, entry_high, stop_loss, targ
       const bodyH = Math.max(1, bodyBot - bodyTop);
       ctx.fillRect(x, bodyTop, cW, bodyH);
     });
-  }, [candles, entry_low, entry_high, stop_loss, target]);
+
+    // Draw the REAL broker price last so it's always on top — solid blue,
+    // thicker than SL/TP, with a right-edge label so it can't be confused
+    // with the (possibly different-source) candle wicks.
+    if (livePrice != null) {
+      const y = toY(livePrice);
+      ctx.strokeStyle = '#38bdf8'; ctx.lineWidth = 1.4; ctx.setLineDash([]);
+      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
+      ctx.fillStyle = '#38bdf8';
+      ctx.font = '9px monospace';
+      ctx.textAlign = 'right';
+      ctx.fillText(`broker ${livePrice}`, W - 3, y - 3);
+    }
+  }, [candles, entry_low, entry_high, stop_loss, target, livePrice]);
 
   if (loading) return <div className="h-36 flex items-center justify-center text-xs text-zinc-700">Loading chart…</div>;
   if (!candles.length) return <div className="h-36 flex items-center justify-center text-xs text-zinc-700">No chart data</div>;
@@ -156,6 +173,11 @@ function CandleChart({ symbol, timeframe, entry_low, entry_high, stop_loss, targ
         <span className="text-yellow-500">Entry {entry_low}–{entry_high}</span>
         <span className="text-emerald-500">TP {target}</span>
       </div>
+      {livePrice != null && (
+        <div className="px-2 py-1 text-xs font-mono bg-zinc-900/60 border-t border-zinc-800/60" style={{color:'#38bdf8'}}>
+          Broker price (used for SL/TP): {livePrice} — chart candles are a separate market feed and may not match exactly
+        </div>
+      )}
     </div>
   );
 }
@@ -1653,6 +1675,7 @@ function AgentsTab() {
                             entry_high={t.entry}
                             stop_loss={t.sl}
                             target={t.tp}
+                            livePrice={t.currentPrice}
                           />
                         )}
                       </div>
