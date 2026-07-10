@@ -38,6 +38,27 @@ export async function POST(req: NextRequest) {
   const results: Record<string, any> = {};
   const started = Date.now();
 
+  // ── Run-lock: prevent overlapping cycles ──────────────────────────────
+  // There was previously NO protection against two orchestrator runs firing
+  // at once (e.g. a fast external cron on top of a manual trigger, or a slow
+  // MT5/Yahoo response causing one cycle to still be mid-flight when the next
+  // starts). Two overlapping cycles both evaluating risk and executing trades
+  // against a not-yet-updated DB state could double-fire orders or blow past
+  // intended risk limits. Lock is considered stale after 3 minutes (well
+  // beyond the ~18-20s a normal cycle takes, but short enough that a genuinely
+  // crashed run doesn't block the system indefinitely).
+  const LOCK_STALE_MS = 3 * 60 * 1000;
+  const { data: lockRow } = await sb.from('agent_status').select('status, updated_at').eq('agent', 'orchestrator_lock').single();
+  if (lockRow?.status === 'running' && (Date.now() - new Date(lockRow.updated_at).getTime()) < LOCK_STALE_MS) {
+    return NextResponse.json({ ok: false, skipped: 'orchestrator already running', locked_since: lockRow.updated_at });
+  }
+  await sb.from('agent_status').upsert({
+    agent: 'orchestrator_lock', status: 'running', last_action: 'Cycle in progress',
+    data: null, updated_at: new Date().toISOString(),
+  }, { onConflict: 'agent' });
+
+  try {
+
   await saveAgentStatus('orchestrator', 'running', 'Starting full agent cycle');
 
   // 0. Position Monitor — client-side SL/TP enforcement (broker strips stops on this account)
@@ -165,6 +186,18 @@ export async function POST(req: NextRequest) {
     executed_trades: execResult?.trades_executed ?? 0,
     results,
   });
+
+  } catch (e: any) {
+    await saveAgentStatus('orchestrator', 'error', `⚠ Cycle crashed: ${e.message}`);
+    return NextResponse.json({ ok: false, error: e.message }, { status: 500 });
+  } finally {
+    // Always release the lock, success or failure, so a single crashed cycle
+    // can't permanently block every future run.
+    await sb.from('agent_status').upsert({
+      agent: 'orchestrator_lock', status: 'idle', last_action: 'Cycle finished',
+      data: null, updated_at: new Date().toISOString(),
+    }, { onConflict: 'agent' });
+  }
 }
 
 export async function GET() {
