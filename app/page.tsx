@@ -1333,6 +1333,15 @@ function AgentsTab() {
   const [mt5Loading, setMt5Loading] = React.useState(false);
   const [mt5Error, setMt5Error] = React.useState<string|null>(null);
   const [mt5BrokerName, setMt5BrokerName] = React.useState('');
+  const [mt5LastUpdated, setMt5LastUpdated] = React.useState<number|null>(null);
+  // Ticks every second purely to force the "Updated Xs ago" label to re-render —
+  // without this the staleness indicator would freeze at whatever it said on the
+  // last actual data fetch instead of counting up live.
+  const [, forceTick] = React.useState(0);
+  React.useEffect(() => {
+    const iv = setInterval(() => forceTick(t => t + 1), 1000);
+    return () => clearInterval(iv);
+  }, []);
 
   // Load saved token — try Supabase first (survives deploys), then localStorage
   React.useEffect(() => {
@@ -1385,6 +1394,7 @@ function AgentsTab() {
         // Happy path — server confirmed connected, just display the data
         setMt5Token(useToken);
         setMt5AccountInfo(d);
+        setMt5LastUpdated(Date.now());
       } else {
         // Token expired — auto-reconnect using saved credentials from Supabase
         const sr = await fetch('/api/agents/status');
@@ -1407,7 +1417,7 @@ function AgentsTab() {
             });
             const r2 = await fetch(`/api/mt5/account?token=${cd.token}`);
             const d2 = await r2.json();
-            if (d2.connected) setMt5AccountInfo(d2);
+            if (d2.connected) { setMt5AccountInfo(d2); setMt5LastUpdated(Date.now()); }
           } else {
             setMt5Error('Auto-reconnect failed. Please reconnect manually.');
           }
@@ -1889,10 +1899,32 @@ function AgentsTab() {
                       <span className="text-xs font-semibold text-zinc-200">{mt5BrokerName}</span>
                     </div>
                     <div className="flex items-center gap-2">
-                      <span className="text-[10px] px-2 py-0.5 rounded font-bold bg-emerald-900/60 text-emerald-400">● CONNECTED</span>
+                      {(() => {
+                        const secsAgo = mt5LastUpdated ? Math.floor((Date.now() - mt5LastUpdated) / 1000) : null;
+                        // Poll interval is 30s — anything beyond ~2x that means recent
+                        // fetches are failing silently in the background (reconnect
+                        // errors, token collisions, etc.) even though old numbers are
+                        // still on screen looking perfectly normal.
+                        const stale = secsAgo === null || secsAgo > 75;
+                        return (
+                          <>
+                            <span className={`text-[10px] px-2 py-0.5 rounded font-bold ${stale ? 'bg-amber-900/60 text-amber-400' : 'bg-emerald-900/60 text-emerald-400'}`}>
+                              {stale ? '● STALE' : '● LIVE'}
+                            </span>
+                            <span className="text-[10px] text-zinc-600">
+                              {secsAgo === null ? 'never updated' : secsAgo < 5 ? 'updated just now' : `updated ${secsAgo}s ago`}
+                            </span>
+                          </>
+                        );
+                      })()}
                       <button onClick={disconnectMt5} className="text-[10px] text-zinc-600 hover:text-red-400 transition-colors">Disconnect</button>
                     </div>
                   </div>
+                  {mt5LastUpdated && (Date.now() - mt5LastUpdated) / 1000 > 75 && (
+                    <div className="mb-2 rounded border border-amber-800/60 bg-amber-900/10 px-2 py-1 text-[10px] text-amber-400">
+                      ⚠ Balance/positions below may be out of date — the last successful refresh was {Math.floor((Date.now() - mt5LastUpdated) / 1000)}s ago. Still retrying in the background.
+                    </div>
+                  )}
                   {mt5AccountInfo.account && (
                     <div className="grid grid-cols-4 gap-2">
                       {[
