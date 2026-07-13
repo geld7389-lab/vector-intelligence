@@ -1688,6 +1688,24 @@ function AgentsTab() {
                             livePrice={t.currentPrice}
                           />
                         )}
+                        {(() => {
+                          const balance = mt5AccountInfo?.account?.Balance ?? mt5AccountInfo?.account?.balance;
+                          const rr = (t.sl != null && t.tp != null && t.entry != null)
+                            ? Math.abs(t.tp - t.entry) / Math.abs(t.entry - t.sl) : null;
+                          if (balance == null && t.risk_percent == null) return null;
+                          return (
+                            <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 rounded px-2 py-1.5 text-[11px]" style={{background:'var(--bg-2)', border:'1px solid var(--border)'}}>
+                              <span style={{color:'var(--muted)'}}>Risk mgmt:</span>
+                              {t.risk_percent != null && balance != null && (
+                                <span style={{color:'var(--text)'}}>
+                                  {(t.risk_percent * 100).toFixed(1)}% of live ${balance.toFixed(2)} balance = <b>${(balance * t.risk_percent).toFixed(2)} at risk</b>
+                                </span>
+                              )}
+                              {t.volume != null && <span style={{color:'var(--text-2)'}}>{t.volume} lots</span>}
+                              {rr != null && <span style={{color:'var(--text-2)'}}>R:R {rr.toFixed(2)}</span>}
+                            </div>
+                          );
+                        })()}
                       </div>
                     );
                   })}

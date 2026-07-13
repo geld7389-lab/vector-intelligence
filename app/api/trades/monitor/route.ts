@@ -133,6 +133,7 @@ export async function POST() {
     let livePositionTickets: Set<string> | null = null;
     const brokerPriceByTicket = new Map<string, number>();
     const brokerProfitByTicket = new Map<string, number>();
+    const brokerLotsByTicket = new Map<string, number>();
     try {
       const posRes = await fetch(`${MT5_BASE}/OpenedOrders?id=${token}`, {
         headers: { accept: 'text/json' },
@@ -163,6 +164,8 @@ export async function POST() {
           // only win/loss labels.
           const profit = Number(p.profit);
           if (t && Number.isFinite(profit)) brokerProfitByTicket.set(t, profit);
+          const lots = Number(p.lots ?? p.volume);
+          if (t && Number.isFinite(lots) && lots > 0) brokerLotsByTicket.set(t, lots);
         }
       }
       // else: got valid JSON but not an array (e.g. an error object like
@@ -297,6 +300,7 @@ export async function POST() {
           pnl,
         });
       } else {
+        const riskMatch = trade.notes?.match(/Risk:\s*([\d.]+)%/);
         watching.push({
           id: trade.id,
           symbol: trade.symbol,
@@ -305,6 +309,8 @@ export async function POST() {
           entry: Number(trade.entry_price),
           sl, tp,
           currentPrice,
+          volume: brokerLotsByTicket.get(ticket) ?? null,
+          risk_percent: riskMatch ? Number(riskMatch[1]) / 100 : null,
         });
       }
     }

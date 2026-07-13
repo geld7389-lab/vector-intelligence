@@ -254,6 +254,7 @@ export async function POST(req: NextRequest) {
           ticket: String(ticket),
           score: trade.setup_score,
           slTpMode: 'client-side',
+          risk_percent: riskPct,
           dbError,
         });
         symbolsUsedThisCycle.add(trade.symbol);
