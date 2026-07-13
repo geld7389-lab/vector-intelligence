@@ -1706,6 +1706,11 @@ function AgentsTab() {
                             </div>
                           );
                         })()}
+                        {t.trailed && (
+                          <div className="mt-2 rounded px-2 py-1.5 text-[11px]" style={{background:'rgba(34,197,94,0.1)', border:'1px solid rgba(34,197,94,0.4)', color:'#22c55e'}}>
+                            ↗ Target extended (trail {t.trailCount}/2) — structure still supports the move, so the original TP was reached and pushed further instead of closing. SL moved up to lock in the prior leg.
+                          </div>
+                        )}
                         {t.structureWarning && (
                           <div className="mt-2 rounded px-2 py-1.5 text-[11px]" style={{background:'rgba(234,179,8,0.1)', border:'1px solid rgba(234,179,8,0.4)', color:'#eab308'}}>
                             ⚠ Structure flipped {t.structureWarning.bias} ({t.structureWarning.ageMin}m old) — thesis for this {t.direction} may be invalidated.

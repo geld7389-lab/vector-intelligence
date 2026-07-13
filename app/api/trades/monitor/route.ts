@@ -284,6 +284,54 @@ export async function POST() {
       const structureLockProfit = structureAgainstTrade && meaningfullyInProfit && !slHit && !tpHit;
       const structureWarningOnly = structureAgainstTrade && !meaningfullyInProfit && !slHit && !tpHit;
 
+      // ── Trail the target instead of always cashing out at the first TP ──
+      // Real example that exposed this gap: a CL trade closed exactly at its
+      // fixed TP (74.97) while the broker's own close price was already
+      // 75.118 — price had kept running past the target before the close even
+      // processed, and the static-TP model just walks away with the smaller
+      // number every time, regardless of whether momentum/structure still
+      // supports the move.
+      //
+      // Only trails when structure is FRESH and STILL AGREES with the trade
+      // direction (never trails on stale or flipped structure — that's
+      // exactly the "don't act on a signal you can't currently trust" rule
+      // from the protective-exit logic above). Capped at MAX_TRAILS extensions
+      // so this can't run away indefinitely — after that, TP_HIT closes
+      // normally like today. Each trail locks in real, meaningful profit by
+      // dragging the stop up, never just moves the target with no protection.
+      const MAX_TRAILS = 2;
+      const trailMatch = trade.notes?.match(/TRAIL:(\d+)/);
+      const trailCount = trailMatch ? Number(trailMatch[1]) : 0;
+      const structureStillAgrees = structureFresh && bias
+        && ((isLong && bias === 'bullish') || (!isLong && bias === 'bearish'));
+      const shouldTrail = tpHit && !slHit && structureStillAgrees && trailCount < MAX_TRAILS && riskDistance > 0;
+
+      if (shouldTrail) {
+        const newTp = isLong ? tp + riskDistance : tp - riskDistance;
+        // Lock in half of the leg just achieved rather than only breakeven —
+        // a real ratchet, not just "don't lose money."
+        const newSl = isLong ? tp - riskDistance * 0.5 : tp + riskDistance * 0.5;
+        const newNotes = (trade.notes ?? '').replace(/\| TRAIL:\d+.*$/, '')
+          + ` | TRAIL:${trailCount + 1} — TP ${tp}→${newTp}, SL ${sl}→${newSl} (structure still ${bias}, locking prior leg) @ ${new Date().toISOString()}`;
+        const upd = await sb.from('trades').update({
+          stop_loss: newSl,
+          take_profit: newTp,
+          notes: newNotes,
+        }).eq('id', trade.id);
+        if (upd.error) {
+          errors.push({ id: trade.id, symbol: trade.symbol, action: 'trail_extend', error: upd.error.message });
+        }
+        watching.push({
+          id: trade.id, symbol: trade.symbol, ticket,
+          direction: trade.direction, entry: Number(trade.entry_price),
+          sl: upd.error ? sl : newSl, tp: upd.error ? tp : newTp,
+          currentPrice,
+          volume: brokerLotsByTicket.get(ticket) ?? null,
+          trailed: !upd.error, trailCount: trailCount + 1,
+        });
+        continue;
+      }
+
       if (slHit || tpHit || structureLockProfit) {
         const reason = slHit ? 'SL_HIT' : tpHit ? 'TP_HIT' : 'STRUCTURE_INVALIDATED';
         const closeResult = await closePosition(token, ticket);
