@@ -122,6 +122,33 @@ export async function POST() {
       return NextResponse.json({ ok: true, checked: 0, closed: [] });
     }
 
+    // ── Structure-based protective exit ─────────────────────────────────
+    // market_structure only updates when a full orchestrator cycle runs
+    // (there's no cron for the full cycle yet, only this monitor). So bias
+    // data can genuinely be hours old. STRUCTURE_STALE_MS is deliberately
+    // generous but finite — beyond this, we explicitly skip the structure
+    // check rather than silently act on data that may no longer reflect
+    // reality. This mirrors the exact lesson from today's price-source bug:
+    // never trust a secondary feed without checking its freshness first.
+    const STRUCTURE_STALE_MS = 90 * 60 * 1000; // 90 minutes
+    let structureBiases: Record<string, string> = {};
+    let structureFresh = false;
+    let structureAgeMin = 0;
+    {
+      const { data: msRow } = await sb.from('agent_status').select('data, updated_at').eq('agent', 'market_structure').single();
+      if (msRow?.updated_at) {
+        const ageMs = Date.now() - new Date(msRow.updated_at).getTime();
+        structureAgeMin = Math.round(ageMs / 60000);
+        structureFresh = ageMs < STRUCTURE_STALE_MS;
+        if (structureFresh) {
+          try {
+            const parsed = typeof msRow.data === 'string' ? JSON.parse(msRow.data) : msRow.data;
+            structureBiases = parsed?.biases ?? {};
+          } catch { structureBiases = {}; }
+        }
+      }
+    }
+
     // Cross-check against REAL live MT5 positions. If a trade was closed manually
     // on MT5 directly (outside this app), its Supabase row never gets updated and
     // the monitor would otherwise "watch" a phantom position forever, since price
@@ -236,8 +263,29 @@ export async function POST() {
       const slHit = isLong ? currentPrice <= sl : currentPrice >= sl;
       const tpHit = isLong ? currentPrice >= tp : currentPrice <= tp;
 
-      if (slHit || tpHit) {
-        const reason = slHit ? 'SL_HIT' : 'TP_HIT';
+      // Structure-based protective exit — see comment above where
+      // structureBiases/structureFresh are loaded. Deliberately asymmetric:
+      // this can only ever trigger an EARLY exit on a trade that's already
+      // meaningfully in profit (locking in a win before a structure flip
+      // erases it). It never overrides the hard SL on a losing trade — a
+      // lagging secondary signal is not grounds to widen or override the
+      // risk level that was actually sized and agreed to at entry. If the
+      // trade is underwater when structure flips, we only flag it (visible
+      // in the API/UI) and let the real SL stay the actual safety net.
+      const bias = structureBiases[trade.symbol];
+      const structureAgainstTrade = structureFresh && bias
+        && ((isLong && bias === 'bearish') || (!isLong && bias === 'bullish'));
+      const riskDistance = Math.abs(Number(trade.entry_price) - sl) || 0;
+      const favorableMove = isLong ? (currentPrice - Number(trade.entry_price)) : (Number(trade.entry_price) - currentPrice);
+      // Require the trade to already be at least 30% of the way to a 1:1 R
+      // gain before structure alone can close it — a single tick of noise
+      // past entry shouldn't trigger this, only a real, meaningful profit.
+      const meaningfullyInProfit = riskDistance > 0 && favorableMove > riskDistance * 0.3;
+      const structureLockProfit = structureAgainstTrade && meaningfullyInProfit && !slHit && !tpHit;
+      const structureWarningOnly = structureAgainstTrade && !meaningfullyInProfit && !slHit && !tpHit;
+
+      if (slHit || tpHit || structureLockProfit) {
+        const reason = slHit ? 'SL_HIT' : tpHit ? 'TP_HIT' : 'STRUCTURE_INVALIDATED';
         const closeResult = await closePosition(token, ticket);
         // Only treat this as a real close if the broker actually confirms it — an error
         // object, missing ticket, or message field means OrderClose likely failed, and
@@ -311,6 +359,7 @@ export async function POST() {
           currentPrice,
           volume: brokerLotsByTicket.get(ticket) ?? null,
           risk_percent: riskMatch ? Number(riskMatch[1]) / 100 : null,
+          structureWarning: structureWarningOnly ? { bias, ageMin: structureAgeMin } : null,
         });
       }
     }
@@ -326,11 +375,18 @@ export async function POST() {
         if (!parts.length) parts.push(watching.length ? `Watching ${watching.length} open position(s) — no stops hit` : 'No open positions to monitor');
         return parts.join(' | ');
       })(),
-      data: JSON.stringify({ checked: stillOpenTrades.length, closed, watching, orphaned, last_run: new Date().toISOString() }),
+      data: JSON.stringify({
+        checked: stillOpenTrades.length, closed, watching, orphaned,
+        structure: { fresh: structureFresh, ageMin: structureAgeMin },
+        last_run: new Date().toISOString(),
+      }),
       updated_at: new Date().toISOString(),
     }, { onConflict: 'agent' });
 
-    return NextResponse.json({ ok: true, checked: stillOpenTrades.length, closed, watching, orphaned, errors });
+    return NextResponse.json({
+      ok: true, checked: stillOpenTrades.length, closed, watching, orphaned, errors,
+      structure: { fresh: structureFresh, ageMin: structureAgeMin },
+    });
   } catch (e: any) {
     await heartbeat('error', `⚠ Monitor crashed: ${e.message}`, { checked: 0, last_run: new Date().toISOString() });
     return NextResponse.json({ ok: false, error: e.message }, { status: 500 });

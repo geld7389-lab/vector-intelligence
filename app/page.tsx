@@ -1706,6 +1706,12 @@ function AgentsTab() {
                             </div>
                           );
                         })()}
+                        {t.structureWarning && (
+                          <div className="mt-2 rounded px-2 py-1.5 text-[11px]" style={{background:'rgba(234,179,8,0.1)', border:'1px solid rgba(234,179,8,0.4)', color:'#eab308'}}>
+                            ⚠ Structure flipped {t.structureWarning.bias} ({t.structureWarning.ageMin}m old) — thesis for this {t.direction} may be invalidated.
+                            Not auto-closed (trade isn't in profit yet) — your SL at {t.sl} remains the real safety net. Your call.
+                          </div>
+                        )}
                       </div>
                     );
                   })}
