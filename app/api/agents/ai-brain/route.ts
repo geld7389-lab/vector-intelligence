@@ -97,9 +97,14 @@ export async function POST(req: NextRequest) {
 
   const candidates: any[] = [];
   const openSymbols: string[] = risk.open_symbols ?? [];
+  // Symbols self-learning has flagged as >=20 trades with <40% win rate.
+  // This data existed every cycle already — it just went straight to a
+  // display panel and nothing ever actually avoided trading these symbols.
+  const pausedSymbols: string[] = risk.paused_symbols ?? [];
 
   for (const [sym, tech] of Object.entries(confluence) as [string,any][]) {
     if (openSymbols.includes(sym)) continue; // already have an open position on this symbol
+    if (pausedSymbols.includes(sym)) continue; // self-learning: this symbol has been a chronic loser
     const bias = biases[sym] ?? 'neutral';
 
     // Determine best direction from all signals

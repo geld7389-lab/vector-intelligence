@@ -55,12 +55,33 @@ export async function POST() {
     `Max ${trades.length}/${maxPositions} positions open`
   ) : null;
 
+  // ── Feed self-learning back into future decisions ─────────────────────
+  // Self-learning was computing win-rate-per-symbol every single cycle and
+  // storing it purely for display — nothing downstream ever read it, so a
+  // symbol could lose 20 times in a row and the system would keep trading it
+  // exactly the same as a symbol with a 70% win rate. Mirrors the same
+  // threshold self-learning itself uses (>=20 trades, <40% win rate) so the
+  // two stay consistent; recomputed here rather than calling the self-learning
+  // route over HTTP to avoid an extra network hop on every risk check.
+  const { data: history } = await sb.from('trades').select('symbol, result').in('result', ['win', 'loss']);
+  const perSymbol: Record<string, { w: number; t: number }> = {};
+  for (const t of history ?? []) {
+    const s = (t as any).symbol ?? 'UNKNOWN';
+    perSymbol[s] ??= { w: 0, t: 0 };
+    perSymbol[s].t++;
+    if ((t as any).result === 'win') perSymbol[s].w++;
+  }
+  const pausedSymbols = Object.entries(perSymbol)
+    .filter(([, { w, t }]) => t >= 20 && (w / t) < 0.4)
+    .map(([sym]) => sym);
+
   return NextResponse.json({
     can_trade: canTrade,
     blocked_reason: blockedReason,
     portfolio_heat: portfolioHeat,
     open_positions: trades.length,
     open_symbols: openSymbols,
+    paused_symbols: pausedSymbols,
     daily_wins: dailyWins,
     daily_losses: dailyLosses,
     consecutive_losses: consecutiveLosses,

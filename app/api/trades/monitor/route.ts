@@ -132,6 +132,7 @@ export async function POST() {
     // that distinction is exactly what caused real open trades to be wrongly closed.
     let livePositionTickets: Set<string> | null = null;
     const brokerPriceByTicket = new Map<string, number>();
+    const brokerProfitByTicket = new Map<string, number>();
     try {
       const posRes = await fetch(`${MT5_BASE}/OpenedOrders?id=${token}`, {
         headers: { accept: 'text/json' },
@@ -154,6 +155,14 @@ export async function POST() {
           const t = String(p.ticket ?? p.Ticket ?? p.orderTicket ?? '');
           const cp = Number(p.closePrice);
           if (t && Number.isFinite(cp) && cp > 0) brokerPriceByTicket.set(t, cp);
+          // profit is the broker's own real P&L math for this position (nets
+          // swap/commission) — used as a fallback if OrderClose doesn't return
+          // its own final profit figure. This was never captured before, which
+          // is why pnl was NULL on every single closed trade — self-learning
+          // had no numeric outcome data to compute profit factor / avg R from,
+          // only win/loss labels.
+          const profit = Number(p.profit);
+          if (t && Number.isFinite(profit)) brokerProfitByTicket.set(t, profit);
         }
       }
       // else: got valid JSON but not an array (e.g. an error object like
@@ -173,6 +182,7 @@ export async function POST() {
           // Position no longer exists on the broker — mark closed so we stop watching it
           const upd = await sb.from('trades').update({
             result: 'closed_external',
+            closed_at: new Date().toISOString(),
             notes: (trade.notes ?? '') + ` | Closed outside app (not found in live MT5 positions) @ ${new Date().toISOString()}`,
           }).eq('id', trade.id);
           if (upd.error) {
@@ -245,14 +255,32 @@ export async function POST() {
         }
 
         const closePrice = closeResult?.closePrice || currentPrice;
-        const profit = isLong
+        const priceDelta = isLong
           ? (closePrice - Number(trade.entry_price))
           : (Number(trade.entry_price) - closePrice);
+
+        // Real dollar P&L: prefer whatever OrderClose itself reports (most
+        // authoritative — the actual realized fill), then the last-known
+        // floating profit captured from OpenedOrders moments earlier, and only
+        // fall back to a raw point-delta (no lot size / contract size known
+        // here, so this is directional-sign-correct but not true dollars) if
+        // the broker genuinely gave us nothing. Previously this was never set
+        // at all — every closed trade had pnl: null forever.
+        const brokerProfit = Number(closeResult?.profit);
+        const pnl = Number.isFinite(brokerProfit) ? brokerProfit
+          : brokerProfitByTicket.has(ticket) ? brokerProfitByTicket.get(ticket)!
+          : priceDelta;
+
+        const riskPoints = Math.abs(Number(trade.entry_price) - sl) || null;
+        const rrAchieved = riskPoints ? Math.round((priceDelta / riskPoints) * 100) / 100 : null;
 
         // Update trade record in Supabase
         const upd = await sb.from('trades').update({
           result: slHit ? 'loss' : 'win',
           exit_price: closePrice,
+          pnl,
+          closed_at: new Date().toISOString(),
+          rr_achieved: rrAchieved,
           notes: (trade.notes ?? '') + ` | ${reason} @ ${closePrice} (decided via ${priceSource} price ${currentPrice}) | Auto-closed by monitor`,
         }).eq('id', trade.id);
         if (upd.error) errors.push({ id: trade.id, symbol: trade.symbol, action: 'tp_sl_close', error: upd.error.message });
@@ -266,6 +294,7 @@ export async function POST() {
           sl, tp,
           currentPrice,
           priceSource,
+          pnl,
         });
       } else {
         watching.push({
