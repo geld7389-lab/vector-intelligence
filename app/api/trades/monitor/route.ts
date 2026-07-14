@@ -36,16 +36,43 @@ async function getPrice(symbol: string): Promise<number | null> {
 }
 
 async function closePosition(token: string, ticket: string): Promise<any> {
-  try {
-    const r = await fetch(`${MT5_BASE}/OrderClose?id=${token}&ticket=${ticket}`, {
-      headers: { accept: 'text/json' },
-      signal: AbortSignal.timeout(10000),
-    });
-    const text = await r.text();
-    try { return JSON.parse(text); } catch { return { raw: text }; }
-  } catch (e: any) {
-    return { error: e.message };
+  // Previously trusted a single OrderClose response at face value — but
+  // mtapi.io can return an ambiguous/in-progress response (e.g. state:
+  // "Started") that looks like success without the position actually having
+  // closed yet. This caused trades to get marked closed in our DB while
+  // remaining genuinely open and unmonitored on the real broker (confirmed:
+  // a CL trade sat "closed" in our records for hours while still live).
+  // Now verifies against OpenedOrders after each attempt, with retries,
+  // before ever reporting success.
+  let lastResult: any = null;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const r = await fetch(`${MT5_BASE}/OrderClose?id=${token}&ticket=${ticket}`, {
+        headers: { accept: 'text/json' },
+        signal: AbortSignal.timeout(10000),
+      });
+      const text = await r.text();
+      try { lastResult = JSON.parse(text); } catch { lastResult = { raw: text }; }
+    } catch (e: any) {
+      lastResult = { error: e.message };
+    }
+
+    await new Promise(res => setTimeout(res, 1500));
+    try {
+      const checkR = await fetch(`${MT5_BASE}/OpenedOrders?id=${token}`, {
+        headers: { accept: 'text/json' },
+        signal: AbortSignal.timeout(8000),
+      });
+      const checkText = await checkR.text();
+      const positions = JSON.parse(checkText);
+      const stillOpen = Array.isArray(positions) && positions.some((p: any) => String(p.ticket ?? p.Ticket) === ticket);
+      if (!stillOpen) return { ...lastResult, verified: true };
+      // else: still open, loop again and retry the close
+    } catch {
+      // Verification check itself failed — can't confirm either way, retry
+    }
   }
+  return { ...lastResult, verified: false };
 }
 
 // Heartbeat helper — MUST be called on every single exit path (early returns,
@@ -335,16 +362,19 @@ export async function POST() {
       if (slHit || tpHit || structureLockProfit) {
         const reason = slHit ? 'SL_HIT' : tpHit ? 'TP_HIT' : 'STRUCTURE_INVALIDATED';
         const closeResult = await closePosition(token, ticket);
-        // Only treat this as a real close if the broker actually confirms it — an error
-        // object, missing ticket, or message field means OrderClose likely failed, and
-        // we must NOT mark the trade closed in our DB while it's still live on the broker.
-        const brokerConfirmedClose = closeResult
-          && !closeResult.error
-          && !closeResult.message
-          && (closeResult.ticket !== undefined || closeResult.closePrice !== undefined || closeResult.closeVolume !== undefined);
+        // Only treat this as a real close if closePosition actually verified
+        // it against OpenedOrders (re-checked, with retries) — NOT just
+        // because the response looked success-shaped. This is exactly what
+        // was broken before: mtapi.io can return a response with a
+        // closePrice/closeVolume field while the position hasn't actually
+        // closed yet (e.g. state: "Started"), which the old shape-based check
+        // treated as confirmed. Confirmed for real: a trade got marked closed
+        // in our DB while remaining live and unmonitored on the broker for
+        // hours.
+        const brokerConfirmedClose = closeResult?.verified === true;
 
         if (!brokerConfirmedClose) {
-          errors.push({ id: trade.id, symbol: trade.symbol, action: 'close_attempt_failed', error: JSON.stringify(closeResult) });
+          errors.push({ id: trade.id, symbol: trade.symbol, action: 'close_attempt_failed_unverified', error: JSON.stringify(closeResult) });
           watching.push({
             id: trade.id, symbol: trade.symbol, ticket,
             direction: trade.direction, entry: Number(trade.entry_price),
