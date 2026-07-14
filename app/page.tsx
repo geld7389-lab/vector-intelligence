@@ -1500,7 +1500,16 @@ function AgentsTab() {
   const runAgents = async () => {
     setRunning(true); setRunResult(null);
     try {
-      const r = await fetch('/api/agents/run', { method:'POST' });
+      // Was calling /api/agents/run, which now requires a ?token= — that auth
+      // exists to stop anonymous external requests (anyone who found the URL
+      // could trigger real trade cycles), not to gate this button. A click
+      // here is already a trusted, human-in-the-loop action from inside the
+      // app, so it goes straight to the orchestrator instead.
+      const r = await fetch('/api/agents/orchestrator', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
       const d = await r.json();
       setRunResult(d);
       setLastRun(new Date().toLocaleTimeString());
