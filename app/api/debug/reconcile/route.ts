@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+export const dynamic = 'force-dynamic';
 import { sb } from '../../../../lib/supabase';
 
 const MT5_BASE = 'https://mt5.mtapi.io';
