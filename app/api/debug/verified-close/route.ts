@@ -5,11 +5,10 @@ export const maxDuration = 30;
 
 const MT5_BASE = 'https://mt5.mtapi.io';
 
-// Single attempt + verify per call — kept short to fit comfortably inside a
-// serverless function timeout. Call repeatedly if still open.
 export async function GET(req: Request) {
   const url = new URL(req.url);
   const ticket = url.searchParams.get('ticket');
+  const lots = url.searchParams.get('lots');
   if (!ticket) return NextResponse.json({ ok: false, error: 'missing ?ticket=' });
 
   const { data: mt5Session } = await sb.from('agent_status').select('data').eq('agent', 'mt5_session').single();
@@ -17,7 +16,9 @@ export async function GET(req: Request) {
   const token = sessionData?.token;
   if (!token) return NextResponse.json({ ok: false, error: 'no MT5 token' });
 
-  const r = await fetch(`${MT5_BASE}/OrderClose?id=${token}&ticket=${ticket}`, { headers: { accept: 'text/json' }, signal: AbortSignal.timeout(12000) });
+  const lotsParam = lots ? `&lots=${lots}` : '';
+  const closeUrl = `${MT5_BASE}/OrderClose?id=${token}&ticket=${ticket}${lotsParam}`;
+  const r = await fetch(closeUrl, { headers: { accept: 'text/json' }, signal: AbortSignal.timeout(12000) });
   const text = await r.text();
   let closeResult: any; try { closeResult = JSON.parse(text); } catch { closeResult = { raw: text }; }
 
@@ -27,5 +28,5 @@ export async function GET(req: Request) {
   let positions: any; try { positions = JSON.parse(checkText); } catch { positions = null; }
   const stillOpen = Array.isArray(positions) && positions.some((p: any) => String(p.ticket) === ticket);
 
-  return NextResponse.json({ ok: true, closed: !stillOpen, closeResult });
+  return NextResponse.json({ ok: true, closed: !stillOpen, closeUrl, closeResult });
 }
