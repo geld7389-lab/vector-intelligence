@@ -40,11 +40,11 @@ $ npm run build
    Linting and checking validity of types ...
    Collecting page data ...
  ⚠ Using edge runtime on a page currently disables static generation for that page
-   Generating static pages (0/7) ...
-   Generating static pages (1/7) 
-   Generating static pages (3/7) 
-   Generating static pages (5/7) 
- ✓ Generating static pages (7/7)
+   Generating static pages (0/8) ...
+   Generating static pages (2/8) 
+   Generating static pages (4/8) 
+   Generating static pages (6/8) 
+ ✓ Generating static pages (8/8)
    Finalizing page optimization ...
    Collecting build traces ...
 
@@ -71,6 +71,7 @@ Route (app)                              Size     First Load JS
 ├ ƒ /api/candles                         0 B                0 B
 ├ ƒ /api/cot                             0 B                0 B
 ├ ƒ /api/crypto                          0 B                0 B
+├ ○ /api/debug/close-orphan              0 B                0 B
 ├ ƒ /api/deepbacktest                    0 B                0 B
 ├ ƒ /api/drawings                        0 B                0 B
 ├ ƒ /api/forex                           0 B                0 B
@@ -112,7 +113,7 @@ Route (app)                              Size     First Load JS
 ƒ  (Dynamic)  server-rendered on demand
 
 ​
-(build.command completed in 32.6s)
+(build.command completed in 24.5s)
 ​
 Functions bundling                                            
 ────────────────────────────────────────────────────────────────
@@ -121,7 +122,7 @@ Packaging Functions from .netlify/functions-internal directory:
  - ___netlify-server-handler/___netlify-server-handler.mjs
 ​
 ​
-(Functions bundling completed in 1.3s)
+(Functions bundling completed in 1s)
 Deploy path:        /home/runner/work/vector-intelligence/vector-intelligence/.next
 Configuration path: /home/runner/work/vector-intelligence/vector-intelligence/netlify.toml
 Deploying to main site URL...
