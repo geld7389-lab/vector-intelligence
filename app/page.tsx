@@ -1396,35 +1396,19 @@ function AgentsTab() {
         setMt5AccountInfo(d);
         setMt5LastUpdated(Date.now());
       } else {
-        // Token expired — auto-reconnect using saved credentials from Supabase
-        const sr = await fetch('/api/agents/status');
-        const sd = await sr.json();
-        const sess = sd.agents?.mt5_session?.data;
-        if (sess?.login && sess?.password && sess?.server) {
-          const cr = await fetch('/api/mt5/connect', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ login: sess.login, password: sess.password, server: sess.server }),
-          });
-          const cd = await cr.json();
-          if (cd.success && cd.token) {
-            setMt5Token(cd.token);
-            localStorage.setItem('mt5_token', cd.token);
-            await fetch('/api/agents/status', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ agent: 'mt5_session', token: cd.token, broker: sess.broker, login: sess.login, password: sess.password, server: sess.server }),
-            });
-            const r2 = await fetch(`/api/mt5/account?token=${cd.token}`);
-            const d2 = await r2.json();
-            if (d2.connected) { setMt5AccountInfo(d2); setMt5LastUpdated(Date.now()); }
-          } else {
-            setMt5Error('Auto-reconnect failed. Please reconnect manually.');
-          }
+        // Token expired — auto-reconnect server-side (the browser never
+        // sees the actual password; the reconnect endpoint reads stored
+        // credentials itself and returns only a fresh token)
+        const cr = await fetch('/api/mt5/reconnect');
+        const cd = await cr.json();
+        if (cd.connected && cd.token) {
+          setMt5Token(cd.token);
+          localStorage.setItem('mt5_token', cd.token);
+          const r2 = await fetch(`/api/mt5/account?token=${cd.token}`);
+          const d2 = await r2.json();
+          if (d2.connected) { setMt5AccountInfo(d2); setMt5LastUpdated(Date.now()); }
         } else {
-          setMt5Error('Session expired. Please reconnect.');
-          setMt5Token(null);
-          localStorage.removeItem('mt5_token');
+          setMt5Error('Auto-reconnect failed. Please reconnect manually.');
         }
       }
     } catch(e: any) { setMt5Error(e.message); }

@@ -28,11 +28,30 @@ export async function POST(req: Request) {
 export async function GET() {
   const { data } = await sb.from('agent_status').select('*');
   const agentMap: Record<string,any> = {};
+  // Fields that must NEVER leave this server in an API response — this route
+  // was returning agent_status rows completely raw, which meant the real MT5
+  // broker password (and now the internal run-trigger secret) were sitting in
+  // plaintext in a public, unauthenticated JSON response the frontend polls
+  // every few seconds. Redact per-agent rather than just excluding whole rows,
+  // since e.g. mt5_session.status is legitimately needed by the UI even though
+  // mt5_session.data.password is not.
+  const SENSITIVE_AGENTS = new Set(['run_secret']);
+  const SENSITIVE_FIELDS = new Set(['password', 'token']);
+  const redact = (obj: any): any => {
+    if (!obj || typeof obj !== 'object') return obj;
+    if (Array.isArray(obj)) return obj.map(redact);
+    const out: Record<string, any> = {};
+    for (const [k, v] of Object.entries(obj)) {
+      out[k] = SENSITIVE_FIELDS.has(k) ? '[redacted]' : redact(v);
+    }
+    return out;
+  };
   for (const row of (data ?? [])) {
+    if (SENSITIVE_AGENTS.has(row.agent)) continue;
     agentMap[row.agent] = {
       status:      row.status,
       last_action: row.last_action,
-      data:        row.data ? JSON.parse(row.data) : null,
+      data:        row.data ? redact(JSON.parse(row.data)) : null,
       updated_at:  row.updated_at,
     };
   }
