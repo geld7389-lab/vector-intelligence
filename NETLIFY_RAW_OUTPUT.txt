@@ -49,7 +49,7 @@ $ npm run build
    Collecting build traces ...
 
 Route (app)                              Size     First Load JS
-┌ ○ /                                    85.2 kB         172 kB
+┌ ○ /                                    85.1 kB         172 kB
 ├ ○ /_not-found                          871 B          87.9 kB
 ├ ƒ /api/agents/ai-brain                 0 B                0 B
 ├ ƒ /api/agents/alerts                   0 B                0 B
@@ -83,6 +83,7 @@ Route (app)                              Size     First Load JS
 ├ ƒ /api/mt5/account                     0 B                0 B
 ├ ƒ /api/mt5/connect                     0 B                0 B
 ├ ƒ /api/mt5/debug                       0 B                0 B
+├ ƒ /api/mt5/reconnect                   0 B                0 B
 ├ ƒ /api/mt5/register                    0 B                0 B
 ├ ƒ /api/mt5/status                      0 B                0 B
 ├ ƒ /api/mt5/trade                       0 B                0 B
@@ -111,7 +112,7 @@ Route (app)                              Size     First Load JS
 ƒ  (Dynamic)  server-rendered on demand
 
 ​
-(build.command completed in 29.4s)
+(build.command completed in 25.2s)
 ​
 Functions bundling                                            
 ────────────────────────────────────────────────────────────────
@@ -120,7 +121,7 @@ Packaging Functions from .netlify/functions-internal directory:
  - ___netlify-server-handler/___netlify-server-handler.mjs
 ​
 ​
-(Functions bundling completed in 1.2s)
+(Functions bundling completed in 1.1s)
 Deploy path:        /home/runner/work/vector-intelligence/vector-intelligence/.next
 Configuration path: /home/runner/work/vector-intelligence/vector-intelligence/netlify.toml
 Deploying to main site URL...
