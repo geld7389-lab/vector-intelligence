@@ -1374,17 +1374,18 @@ function AgentsTab() {
   }, []);
 
   const loadMt5Accounts = React.useCallback(async (token?: string) => {
-    const t = token ?? mt5Token;
     setMt5Loading(true); setMt5Error(null);
     try {
-      let useToken = t;
-      // No token at all — try pulling from Supabase
-      if (!useToken) {
-        const sr = await fetch('/api/agents/status');
-        const sd = await sr.json();
-        const sess = sd.agents?.mt5_session?.data;
-        if (sess?.token) { useToken = sess.token; }
-      }
+      // Always resolve to the CURRENT server-side token (kept fresh by the
+      // monitor cron every 60s) rather than trusting a passed-in/cached one.
+      // Was previously reusing a browser-cached token indefinitely as long as
+      // it still "validated" — but mtapi.io can keep returning stale/frozen
+      // account data for an old token even while it still connects fine,
+      // which is exactly why the balance panel could say "updated just now"
+      // while showing numbers that were actually minutes/hours old.
+      const tr = await fetch('/api/mt5/token');
+      const td = await tr.json();
+      let useToken = td?.token ?? token ?? mt5Token;
       if (!useToken) { setMt5Loading(false); return; }
 
       const r = await fetch(`/api/mt5/account?token=${useToken}`);
@@ -1403,7 +1404,6 @@ function AgentsTab() {
         const cd = await cr.json();
         if (cd.connected && cd.token) {
           setMt5Token(cd.token);
-          localStorage.setItem('mt5_token', cd.token);
           const r2 = await fetch(`/api/mt5/account?token=${cd.token}`);
           const d2 = await r2.json();
           if (d2.connected) { setMt5AccountInfo(d2); setMt5LastUpdated(Date.now()); }
