@@ -113,7 +113,7 @@ Route (app)                              Size     First Load JS
 ƒ  (Dynamic)  server-rendered on demand
 
 ​
-(build.command completed in 31.8s)
+(build.command completed in 31.5s)
 ​
 Functions bundling                                            
 ────────────────────────────────────────────────────────────────
