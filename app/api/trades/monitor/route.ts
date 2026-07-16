@@ -403,9 +403,23 @@ export async function POST() {
         const riskPoints = Math.abs(Number(trade.entry_price) - sl) || null;
         const rrAchieved = riskPoints ? Math.round((priceDelta / riskPoints) * 100) / 100 : null;
 
+        // Label by the REAL dollar outcome, not which line got crossed. This
+        // was previously result: slHit ? 'loss' : 'win' — correct for a plain
+        // fixed SL/TP, but wrong once trailing exists: a trailed SL can sit
+        // well above original entry, so hitting it (slHit) can still be a
+        // genuine profit. Confirmed real case: a CL trade closed via SL_HIT
+        // against a trailed stop with pnl +$1.17, got labeled 'loss', and
+        // that single mislabel was enough to trip the "5 consecutive losses"
+        // circuit breaker and pause the executor over a stretch that was
+        // actually 4 real losses, not 5. Falls back to the slHit/tpHit
+        // heuristic only when pnl is exactly zero/unavailable — an outcome
+        // this ambiguous shouldn't happen often, but must resolve to
+        // something rather than crash.
+        const result = pnl > 0 ? 'win' : pnl < 0 ? 'loss' : (slHit ? 'loss' : 'win');
+
         // Update trade record in Supabase
         const upd = await sb.from('trades').update({
-          result: slHit ? 'loss' : 'win',
+          result,
           exit_price: closePrice,
           pnl,
           closed_at: new Date().toISOString(),
