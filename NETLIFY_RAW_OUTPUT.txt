@@ -71,7 +71,6 @@ Route (app)                              Size     First Load JS
 ├ ƒ /api/candles                         0 B                0 B
 ├ ƒ /api/cot                             0 B                0 B
 ├ ƒ /api/crypto                          0 B                0 B
-├ ƒ /api/debug/symbol-params             0 B                0 B
 ├ ƒ /api/deepbacktest                    0 B                0 B
 ├ ƒ /api/drawings                        0 B                0 B
 ├ ƒ /api/forex                           0 B                0 B
@@ -114,7 +113,7 @@ Route (app)                              Size     First Load JS
 ƒ  (Dynamic)  server-rendered on demand
 
 ​
-(build.command completed in 33.8s)
+(build.command completed in 32.2s)
 ​
 Functions bundling                                            
 ────────────────────────────────────────────────────────────────
