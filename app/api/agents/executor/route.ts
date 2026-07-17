@@ -50,6 +50,32 @@ async function mt5Request(path: string, token: string) {
   return r.ok ? r.json() : null;
 }
 
+// Position sizing was assuming $1 of P&L per "point" per 1.0 lot for every
+// instrument — true for indices like NQ/ES (contractSize=1) and coincidentally
+// true for USOIL.c (contractSize 100 x point 0.01 = $1), but badly wrong for
+// gold: XAUUSD is 100oz/lot, so real $/point/lot is $10, not $1. At the 0.01
+// lot floor, that meant every GC trade risked ~$20 against an intended ~$1.50
+// (1% of a small account) — confirmed as the dominant source of real losses
+// (GC: 3/3 losses, -$52 total, avg R:R -1.31, i.e. losing MORE than the
+// "intended" 1R because the intended R was never the real R to begin with).
+// Now fetches the broker's actual contract size per symbol instead of assuming.
+async function getSymbolSpec(token: string, mt5Symbol: string): Promise<{ contractSize: number; minLots: number; lotsStep: number } | null> {
+  try {
+    const data = await mt5Request(`SymbolParams?symbol=${encodeURIComponent(mt5Symbol)}`, token);
+    const contractSize = Number(data?.symbolInfo?.contractSize);
+    const minLots = Number(data?.symbolGroup?.minLots);
+    const lotsStep = Number(data?.symbolGroup?.lotsStep);
+    if (!Number.isFinite(contractSize) || contractSize <= 0) return null;
+    return {
+      contractSize,
+      minLots: Number.isFinite(minLots) && minLots > 0 ? minLots : 0.01,
+      lotsStep: Number.isFinite(lotsStep) && lotsStep > 0 ? lotsStep : 0.01,
+    };
+  } catch {
+    return null;
+  }
+}
+
 async function getAccountInfo(token: string) {
   const r = await fetch(`${MT5_BASE}/AccountSummary?id=${token}`, {
     headers: { accept: 'text/json' },
@@ -211,11 +237,34 @@ export async function POST(req: NextRequest) {
       // real fill price for accurate SL/TP calculation
       const ptSize = POINT_SIZE[trade.symbol] ?? pointSize;
       const slPts = DEFAULT_SL_POINTS[trade.symbol] ?? defaultSl;
-
-      let volume = parseFloat((riskAmount / (slPts * 1)).toFixed(2));
-      volume = Math.max(0.01, Math.min(volume, 0.10));
+      const priceDistance = slPts * ptSize; // real price distance the SL sits at
 
       const usedSymbol = MT5_SYMBOL_MAP[trade.symbol] ?? (trade.symbol + '.');
+      const spec = await getSymbolSpec(token, usedSymbol);
+      // Real $ risked per 1.0 lot for this exact price distance. Fall back to
+      // the old $1/point assumption only if the broker genuinely didn't return
+      // spec data — better to trade with a possibly-wrong-but-reasonable
+      // number than to fail every trade if SymbolParams has a bad day.
+      const dollarsPerLotAtDistance = spec ? priceDistance * spec.contractSize : priceDistance;
+      const minLots = spec?.minLots ?? 0.01;
+      const lotsStep = spec?.lotsStep ?? 0.01;
+
+      let volume = dollarsPerLotAtDistance > 0 ? riskAmount / dollarsPerLotAtDistance : 0;
+      volume = Math.round(volume / lotsStep) * lotsStep;
+      volume = Math.min(volume, 0.10);
+      volume = parseFloat(volume.toFixed(2));
+
+      if (volume < minLots) {
+        // Even the broker's smallest tradeable size for this instrument would
+        // risk more than the intended 1% — this is exactly what silently
+        // happened with gold before. Skip rather than force-trade oversized.
+        const impliedRiskAtMinLot = dollarsPerLotAtDistance * minLots;
+        failed.push({
+          symbol: trade.symbol,
+          reason: `Skipped — minimum lot size (${minLots}) would risk ~$${impliedRiskAtMinLot.toFixed(2)} against a $${riskAmount.toFixed(2)} budget (1%). Account too small to trade this instrument safely right now.`,
+        });
+        continue;
+      }
       const result = await placeTrade(token, usedSymbol, trade.direction, volume);
       const ticket = result?.Id ?? result?.id ?? result?.ticket ?? result?.Ticket ?? result?.raw;
       // Use broker's actual fill price for SL/TP levels — more accurate than Yahoo estimate
