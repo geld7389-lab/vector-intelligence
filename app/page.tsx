@@ -1497,6 +1497,23 @@ function AgentsTab() {
     return () => clearInterval(iv);
   }, [mt5Token, loadMt5Accounts]);
 
+  // Mobile browsers suspend setInterval timers when backgrounded (screen lock,
+  // switching apps, tab backgrounded) — the 30s tick above doesn't fire while
+  // suspended, so reopening the app could sit on a stale balance for however
+  // long it was backgrounded before the next tick happens to land. Force an
+  // immediate refetch the instant the tab/app regains focus instead of
+  // waiting on the timer.
+  React.useEffect(() => {
+    if (!mt5Token) return;
+    const onFocus = () => loadMt5Accounts(mt5Token);
+    window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onFocus);
+    return () => {
+      window.removeEventListener('focus', onFocus);
+      document.removeEventListener('visibilitychange', onFocus);
+    };
+  }, [mt5Token, loadMt5Accounts]);
+
   const runAgents = async () => {
     setRunning(true); setRunResult(null);
     try {
