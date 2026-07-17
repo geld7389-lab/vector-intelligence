@@ -176,7 +176,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: false, error: 'Failed to get MT5 token', trades_executed: 0 });
   }
 
-  if (!risk.can_trade) {
+  const { data: shadowRow } = await sb.from('agent_status').select('data').eq('agent', 'shadow_mode').single();
+  const shadowData = typeof shadowRow?.data === 'string' ? JSON.parse(shadowRow.data) : shadowRow?.data;
+  const isShadowMode = shadowData?.enabled === true;
+
+  if (!isShadowMode && !risk.can_trade) {
     return NextResponse.json({
       ok: false,
       blocked: true,
@@ -216,20 +220,34 @@ export async function POST(req: NextRequest) {
     const defaultSl = DEFAULT_SL_POINTS[mt5Symbol] ?? 30;
 
     try {
-      // Get price from Yahoo Finance (MT5 Quote endpoint needs WebSocket subscription to stream)
+      // Real broker quote instead of Yahoo — GetQuote doesn't require an open
+      // position, works for both live and paper trades, and is the same real
+      // price source the monitor now uses for SL/TP decisions (fixing the
+      // exact futures-vs-broker mismatch that caused false closes earlier).
       let usePrice = 0;
-      const ySym = YAHOO_MAP[trade.symbol] ?? `${trade.symbol}=F`;
+      const usedSymbolForQuote = MT5_SYMBOL_MAP[trade.symbol] ?? (trade.symbol + '.');
       try {
-        const yr = await fetch(
-          `https://query1.finance.yahoo.com/v8/finance/chart/${ySym}?interval=1m&range=1d`,
-          { headers: { 'User-Agent': 'Mozilla/5.0' }, signal: AbortSignal.timeout(8000) }
-        );
-        const yj = await yr.json();
-        usePrice = yj?.chart?.result?.[0]?.meta?.regularMarketPrice ?? 0;
+        const qr = await fetch(`${MT5_BASE}/GetQuote?id=${token}&symbol=${encodeURIComponent(usedSymbolForQuote)}`, {
+          headers: { accept: 'text/json' }, signal: AbortSignal.timeout(10000),
+        });
+        const qj = await qr.json();
+        usePrice = trade.direction === 'long' ? (qj?.ask ?? qj?.bid ?? 0) : (qj?.bid ?? qj?.ask ?? 0);
       } catch {}
+      // Yahoo fallback only if the broker quote genuinely failed
+      if (!usePrice) {
+        const ySym = YAHOO_MAP[trade.symbol] ?? `${trade.symbol}=F`;
+        try {
+          const yr = await fetch(
+            `https://query1.finance.yahoo.com/v8/finance/chart/${ySym}?interval=1m&range=1d`,
+            { headers: { 'User-Agent': 'Mozilla/5.0' }, signal: AbortSignal.timeout(8000) }
+          );
+          const yj = await yr.json();
+          usePrice = yj?.chart?.result?.[0]?.meta?.regularMarketPrice ?? 0;
+        } catch {}
+      }
 
       if (!usePrice) {
-        failed.push({ symbol: trade.symbol, reason: 'Could not get price from Yahoo Finance' });
+        failed.push({ symbol: trade.symbol, reason: 'Could not get a live price (broker quote and Yahoo fallback both failed)' });
         continue;
       }
 
@@ -265,6 +283,38 @@ export async function POST(req: NextRequest) {
         });
         continue;
       }
+      if (isShadowMode) {
+        // No broker call at all — this is the whole point of shadow mode.
+        // Use the real quote price as the simulated fill (no slippage model,
+        // but it's the same live number a real order would have used).
+        const fillPrice = usePrice;
+        const finalSl = trade.direction === 'buy'
+          ? +(fillPrice - slPts * ptSize).toFixed(5)
+          : +(fillPrice + slPts * ptSize).toFixed(5);
+        const finalTp = trade.direction === 'buy'
+          ? +(fillPrice + slPts * ptSize * 2).toFixed(5)
+          : +(fillPrice - slPts * ptSize * 2).toFixed(5);
+
+        await sb.from('trades').insert({
+          symbol: trade.symbol,
+          direction: trade.direction === 'buy' ? 'long' : 'short',
+          entry_price: fillPrice,
+          stop_loss: finalSl,
+          take_profit: finalTp,
+          result: 'open',
+          is_paper: true,
+          opened_at: new Date().toISOString(),
+          notes: `PAPER (shadow mode) | Score: ${trade.setup_score} | Risk: ${(riskPct * 100).toFixed(1)}% | ${trade.primary_reason ?? ''} | MT5: ${usedSymbol} | Simulated volume: ${volume} lots`,
+        });
+        executed.push({
+          symbol: trade.symbol, mt5Symbol: usedSymbol, direction: trade.direction,
+          volume, entry: fillPrice, sl: finalSl, tp: finalTp,
+          score: trade.setup_score, risk_percent: riskPct, paper: true,
+        });
+        symbolsUsedThisCycle.add(trade.symbol);
+        continue;
+      }
+
       const result = await placeTrade(token, usedSymbol, trade.direction, volume);
       const ticket = result?.Id ?? result?.id ?? result?.ticket ?? result?.Ticket ?? result?.raw;
       // Use broker's actual fill price for SL/TP levels — more accurate than Yahoo estimate
@@ -287,6 +337,7 @@ export async function POST(req: NextRequest) {
           stop_loss: finalSl,
           take_profit: finalTp,
           result: 'open',
+          is_paper: false,
           opened_at: new Date().toISOString(),
           notes: `Agent execution | Score: ${trade.setup_score} | Risk: ${(riskPct * 100).toFixed(1)}% | ${trade.primary_reason ?? ''} | Ticket: ${String(ticket)} | MT5: ${usedSymbol} | SL/TP client-side @ ${finalSl}/${finalTp}`,
         });

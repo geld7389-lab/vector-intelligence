@@ -273,6 +273,67 @@ export async function POST() {
     const watching: any[] = [];
 
     for (const trade of stillOpenTrades) {
+      if (trade.is_paper) {
+        // Shadow mode: track against the same real broker quotes real trades
+        // use, but never touch the broker itself. Deliberately simpler than
+        // the real-trade path — plain SL/TP only, no trailing/structure-exit
+        // parity attempted yet. That's an honest limitation, not a bug: this
+        // exists to answer "does the underlying setup-scoring have edge",
+        // and plain SL/TP is the cleanest apples-to-apples baseline for that.
+        const mt5Match = trade.notes?.match(/MT5:\s*(\S+)/);
+        const paperSymbol = mt5Match?.[1];
+        if (!paperSymbol) continue;
+        try {
+          const qr = await fetch(`${MT5_BASE}/GetQuote?id=${token}&symbol=${encodeURIComponent(paperSymbol)}`, {
+            headers: { accept: 'text/json' }, signal: AbortSignal.timeout(10000),
+          });
+          const qj = await qr.json();
+          const isLongP = trade.direction === 'long';
+          // Exit at the side you'd actually transact on — bid to sell out of
+          // a long, ask to buy back a short — so spread cost is simulated too.
+          const curP = isLongP ? Number(qj?.bid) : Number(qj?.ask);
+          if (!Number.isFinite(curP) || curP <= 0) continue;
+
+          const slP = Number(trade.stop_loss), tpP = Number(trade.take_profit);
+          const slHitP = isLongP ? curP <= slP : curP >= slP;
+          const tpHitP = isLongP ? curP >= tpP : curP <= tpP;
+          if (!slHitP && !tpHitP) {
+            watching.push({ id: trade.id, symbol: trade.symbol, paper: true, direction: trade.direction, entry: Number(trade.entry_price), sl: slP, tp: tpP, currentPrice: curP });
+            continue;
+          }
+
+          const volMatch = trade.notes?.match(/Simulated volume:\s*([\d.]+)/);
+          const simVolume = volMatch ? Number(volMatch[1]) : 0.01;
+          let contractSize = 1;
+          try {
+            const specR = await fetch(`${MT5_BASE}/SymbolParams?symbol=${encodeURIComponent(paperSymbol)}&id=${token}`, {
+              headers: { accept: 'text/json' }, signal: AbortSignal.timeout(10000),
+            });
+            const specJ = await specR.json();
+            const cs = Number(specJ?.symbolInfo?.contractSize);
+            if (Number.isFinite(cs) && cs > 0) contractSize = cs;
+          } catch {}
+          const priceDeltaP = isLongP ? (curP - Number(trade.entry_price)) : (Number(trade.entry_price) - curP);
+          const pnlP = priceDeltaP * contractSize * simVolume;
+          const riskDistP = Math.abs(Number(trade.entry_price) - slP) || null;
+          const rrP = riskDistP ? Math.round((priceDeltaP / riskDistP) * 100) / 100 : null;
+
+          await sb.from('trades').update({
+            result: pnlP > 0 ? 'win' : pnlP < 0 ? 'loss' : (slHitP ? 'loss' : 'win'),
+            exit_price: curP,
+            pnl: pnlP,
+            closed_at: new Date().toISOString(),
+            rr_achieved: rrP,
+            notes: (trade.notes ?? '') + ` | PAPER ${slHitP ? 'SL_HIT' : 'TP_HIT'} @ ${curP}`,
+          }).eq('id', trade.id);
+          closed.push({ symbol: trade.symbol, paper: true, reason: slHitP ? 'SL_HIT' : 'TP_HIT', entry: trade.entry_price, exit: curP, pnl: pnlP });
+        } catch {
+          // GetQuote failed this cycle — leave it open, try again next cycle
+          watching.push({ id: trade.id, symbol: trade.symbol, paper: true, direction: trade.direction, entry: Number(trade.entry_price), sl: Number(trade.stop_loss), tp: Number(trade.take_profit) });
+        }
+        continue;
+      }
+
       // Extract MT5 ticket from notes field: "... | Ticket: 59201089 | ..."
       const ticketMatch = trade.notes?.match(/Ticket:\s*(\d+)/);
       if (!ticketMatch) continue;
