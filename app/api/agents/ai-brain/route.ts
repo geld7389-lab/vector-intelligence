@@ -5,8 +5,50 @@ export const maxDuration = 45;
 
 const GROQ_KEY = process.env.GROQ_API_KEY ?? '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';
 
+// Pulls the same rich context /api/analyze already proved is better-built than
+// the plain technical-indicator prompt this route used to send — real ICT
+// knowledge base excerpts, actual COT institutional positioning, SMT
+// divergence signals, and weekly bias reasoning. The automated approval path
+// had never used any of this; it was scoring on bias/EMA/RSI/VWAP/FVG-count
+// alone. Output stays a single structured JSON object (unlike /api/analyze's
+// free-text report) so the executor/risk pipeline downstream needs zero
+// changes — this only replaces HOW the score gets decided, not the contract.
+async function getKnowledgeContext(symbol: string, direction: string) {
+  const [{ data: kbRows }, { data: cotRows }, { data: smtRows }, { data: biasRow }] = await Promise.all([
+    sb.from('knowledge_base').select('title,content').limit(12),
+    sb.from('cot_data').select('*')
+      .eq('symbol', symbol.replace('USD', '').replace('EURUSD', 'EUR').replace('GBPUSD', 'GBP'))
+      .order('report_date', { ascending: false }).limit(1),
+    sb.from('smt_signals').select('*').gte('detected_at', new Date(Date.now() - 4 * 60 * 60 * 1000).toISOString())
+      .order('detected_at', { ascending: false }).limit(3),
+    sb.from('weekly_bias').select('*').eq('symbol', symbol).order('created_at', { ascending: false }).limit(1).single(),
+  ]);
+
+  const kbContext = (kbRows ?? []).map((r: any) => `[${r.title}] ${r.content?.slice(0, 220)}`).join('\n');
+
+  let cotContext = '';
+  const c = cotRows?.[0];
+  if (c) {
+    const commAligned = (direction === 'buy' && c.comm_net > 0) || (direction === 'sell' && c.comm_net < 0);
+    cotContext = `COT (latest CFTC): Commercials net ${c.comm_net > 0 ? '+' : ''}${Math.round(c.comm_net / 1000)}k | Large Specs net ${c.large_net > 0 ? '+' : ''}${Math.round(c.large_net / 1000)}k | ${commAligned ? 'ALIGNED — commercials confirm this direction' : 'OPPOSED — commercials positioned against this trade'}`;
+  }
+
+  let smtContext = '';
+  if (smtRows?.length) {
+    smtContext = `SMT divergence (last 4h): ${smtRows.map((s: any) => `${s.divergence_type} (${new Date(s.detected_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} NY)`).join('; ')}`;
+  }
+
+  const biasContext = biasRow
+    ? `Weekly bias: ${biasRow.bias?.toUpperCase()} | Key levels: ${biasRow.key_levels ?? 'not set'} | Reasoning: ${biasRow.reasoning ?? ''}`
+    : '';
+
+  return { kbContext, cotContext, smtContext, biasContext };
+}
+
 async function scoreSetup(setup: any): Promise<any> {
-  const prompt = `You are an expert ICT/SMC prop trader. Score this trade setup honestly.
+  const ctx = await getKnowledgeContext(setup.symbol, setup.direction);
+
+  const prompt = `You are an expert ICT/SMC prop trader. Score this trade setup honestly, grounded in the ICT knowledge base provided — do not just pattern-match on raw indicator values, actually reason about whether this setup matches the concepts described.
 
 Symbol: ${setup.symbol} | Direction: ${setup.direction.toUpperCase()}
 HTF Bias (D1): ${setup.bias_h4} | LTF Bias (H1): ${setup.bias_h1}
@@ -15,16 +57,23 @@ Price vs VWAP: ${setup.price_vs_vwap} | Volatility: ${setup.volatility}
 Active FVGs: ${setup.fvgs?.length ?? 0} | Order Blocks: ${setup.obs?.length ?? 0}
 DXY: ${setup.dxy_trend} | Sentiment: ${setup.sentiment_score}/100 | News blackout: ${setup.blackout_active}
 
+${ctx.cotContext}
+${ctx.smtContext}
+${ctx.biasContext}
+
+ICT KNOWLEDGE BASE CONTEXT:
+${ctx.kbContext}
+
 Score 1-10 where:
-8-10 = Strong confluence, high conviction trade
-6-7 = Good setup, acceptable risk
-4-5 = Marginal, borderline
-1-3 = Weak, skip
+8-10 = Strong confluence per ICT concepts above, institutional alignment (COT/SMT), high conviction
+6-7 = Good setup, acceptable risk, minor conflicts
+4-5 = Marginal, borderline, or conflicts with COT/SMT/weekly bias
+1-3 = Weak, skip, or contradicts the knowledge base concepts
 
 Respond ONLY with JSON:
-{"setup_score":<1-10>,"confidence":"<low|medium|high>","primary_reason":"<one sentence>","invalidation":"<key level>","risk_adjustment":"<normal|reduce_half|skip>","trade_approved":<true|false>,"entry_zone":"<brief>","target":"<brief>"}
+{"setup_score":<1-10>,"confidence":"<low|medium|high>","primary_reason":"<one sentence citing specific ICT concept or institutional data used>","invalidation":"<key level>","risk_adjustment":"<normal|reduce_half|skip>","trade_approved":<true|false>,"entry_zone":"<brief>","target":"<brief>"}
 
-Approve if score >= 7 AND medium/high confidence AND bias aligns.`;
+Approve if score >= 7 AND medium/high confidence AND bias aligns AND not directly opposed by COT/SMT.`;
 
   try {
     const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
@@ -32,19 +81,23 @@ Approve if score >= 7 AND medium/high confidence AND bias aligns.`;
       headers: { 'Authorization': `Bearer ${GROQ_KEY}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
         model: 'llama-3.3-70b-versatile',
-        max_tokens: 200,
+        max_tokens: 300,
         temperature: 0.1,
         messages: [{ role: 'user', content: prompt }],
       }),
       signal: AbortSignal.timeout(20000),
     });
-    if (!res.ok) throw new Error(`Groq ${res.status}`);
+    if (!res.ok) throw new Error(`Groq ${res.status}: ${await res.text()}`);
     const j = await res.json();
     const text = j?.choices?.[0]?.message?.content ?? '{}';
     const clean = text.replace(/```json|```/g,'').trim();
     const parsed = JSON.parse(clean);
-    return { ...parsed, symbol: setup.symbol, direction: setup.direction };
-  } catch {
+    // knowledge_grounded lets us verify (via trade notes) that a given
+    // approval actually came from the KB-aware LLM path, not the fallback —
+    // exactly the distinction that was invisible before ("Rule-based:" was
+    // silently on every single trade because the API key was dead).
+    return { ...parsed, symbol: setup.symbol, direction: setup.direction, knowledge_grounded: true };
+  } catch (e: any) {
     // Rule-based fallback — smarter scoring
     let score = 0;
 
@@ -82,12 +135,13 @@ Approve if score >= 7 AND medium/high confidence AND bias aligns.`;
       direction: setup.direction,
       setup_score: score,
       confidence: score >= 7 ? 'high' : score >= 5 ? 'medium' : 'low',
-      primary_reason: `Rule-based: ${emaAligned?'EMA aligned,':''} ${biasMatch?'HTF bias match,':''} ${setup.fvgs?.length??0} FVGs, ${setup.obs?.length??0} OBs`,
+      primary_reason: `Rule-based (LLM unavailable: ${e?.message ?? 'unknown error'}): ${emaAligned?'EMA aligned,':''} ${biasMatch?'HTF bias match,':''} ${setup.fvgs?.length??0} FVGs, ${setup.obs?.length??0} OBs`,
       invalidation: `Bias flips to ${setup.direction==='buy'?'bearish':'bullish'}`,
       risk_adjustment: score >= 7 ? 'normal' : 'reduce_half',
       trade_approved: approved,
       entry_zone: 'Near FVG/OB zone',
       target: 'Next liquidity pool',
+      knowledge_grounded: false,
     };
   }
 }
