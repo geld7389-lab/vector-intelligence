@@ -107,7 +107,24 @@ Approve if score >= 7 AND medium/high confidence AND bias aligns AND not directl
     // approval actually came from the KB-aware LLM path, not the fallback —
     // exactly the distinction that was invisible before ("Rule-based:" was
     // silently on every single trade because the API key was dead).
-    return { ...parsed, symbol: setup.symbol, direction: setup.direction, knowledge_grounded: true };
+    // Don't trust the LLM's own trade_approved boolean at face value —
+    // confirmed live it doesn't always self-enforce the threshold it was
+    // given (a GC setup scored 6 but the model set trade_approved: true
+    // anyway, directly contradicting the ">=7" rule in its own prompt).
+    // Compute it deterministically instead, same policy as the rule-based
+    // fallback already uses, so the stated threshold is actually enforced
+    // regardless of what the model's own boolean says.
+    const scoreNum = Number(parsed.setup_score) || 0;
+    const deterministicApproved = scoreNum >= 7
+      && parsed.confidence !== 'low'
+      && !setup.blackout_active;
+    return {
+      ...parsed,
+      trade_approved: deterministicApproved,
+      symbol: setup.symbol,
+      direction: setup.direction,
+      knowledge_grounded: true,
+    };
   } catch (e: any) {
     // Rule-based fallback — smarter scoring
     let score = 0;
