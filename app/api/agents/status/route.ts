@@ -35,7 +35,7 @@ export async function GET() {
   // every few seconds. Redact per-agent rather than just excluding whole rows,
   // since e.g. mt5_session.status is legitimately needed by the UI even though
   // mt5_session.data.password is not.
-  const SENSITIVE_AGENTS = new Set(['run_secret']);
+  const SENSITIVE_AGENTS = new Set(['run_secret', 'groq_key']);
   const SENSITIVE_FIELDS = new Set(['password', 'token']);
   const redact = (obj: any): any => {
     if (!obj || typeof obj !== 'object') return obj;

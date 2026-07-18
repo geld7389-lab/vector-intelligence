@@ -3,7 +3,16 @@ import { sb } from '../../../../lib/supabase';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 45;
 
-const GROQ_KEY = process.env.GROQ_API_KEY ?? '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';
+// Key lives in Supabase (agent_status: 'groq_key'), never committed to this
+// public repo — same reason the run-trigger secret moved there instead of
+// vercel.json, which anyone can read directly on GitHub. The previous
+// hardcoded key here was dead ("Invalid API Key"), which is the real reason
+// every trade's score has come from the rule-based fallback so far.
+async function getGroqKey(): Promise<string | null> {
+  const { data } = await sb.from('agent_status').select('data').eq('agent', 'groq_key').single();
+  const parsed = typeof data?.data === 'string' ? JSON.parse(data.data) : data?.data;
+  return parsed?.key ?? null;
+}
 
 // Pulls the same rich context /api/analyze already proved is better-built than
 // the plain technical-indicator prompt this route used to send — real ICT
@@ -76,6 +85,8 @@ Respond ONLY with JSON:
 Approve if score >= 7 AND medium/high confidence AND bias aligns AND not directly opposed by COT/SMT.`;
 
   try {
+    const GROQ_KEY = await getGroqKey();
+    if (!GROQ_KEY) throw new Error('no Groq key configured in Supabase (agent_status: groq_key)');
     const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${GROQ_KEY}`, 'Content-Type': 'application/json' },
