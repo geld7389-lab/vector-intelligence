@@ -34,8 +34,8 @@ async function getKnowledgeBaseContext(): Promise<string> {
   if (cachedKbContext && Date.now() - cachedKbContext.fetchedAt < FIVE_MIN) {
     return cachedKbContext.text;
   }
-  const { data: kbRows } = await sb.from('knowledge_base').select('title,content').limit(12);
-  const text = (kbRows ?? []).map((r: any) => `[${r.title}] ${r.content?.slice(0, 220)}`).join('\n');
+  const { data: kbRows } = await sb.from('knowledge_base').select('title,content').limit(5);
+  const text = (kbRows ?? []).map((r: any) => `[${r.title}] ${r.content?.slice(0, 130)}`).join('\n');
   cachedKbContext = { text, fetchedAt: Date.now() };
   return text;
 }
@@ -107,7 +107,7 @@ Approve if score >= 7 AND medium/high confidence AND bias aligns AND not directl
       headers: { 'Authorization': `Bearer ${GROQ_KEY}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
         model: 'llama-3.3-70b-versatile',
-        max_tokens: 300,
+        max_tokens: 180,
         temperature: 0.1,
         messages: [{ role: 'user', content: prompt }],
       }),
@@ -238,7 +238,7 @@ export async function POST(req: NextRequest) {
   }
 
   // Score all candidates in parallel (max 6)
-  const toScore = candidates.slice(0, 6);
+  const toScore = candidates.slice(0, 3);
   const sharedKb = await getKnowledgeBaseContext();
   const scored = await Promise.all(toScore.map((s: any) => scoreSetup(s, sharedKb)));
 

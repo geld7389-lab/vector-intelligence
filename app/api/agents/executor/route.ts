@@ -209,9 +209,28 @@ export async function POST(req: NextRequest) {
   const openSymbolsNow = new Set((currentOpenTrades ?? []).map((t: any) => t.symbol));
   const symbolsUsedThisCycle = new Set<string>();
 
+  // Cooldown: don't immediately re-bet the same symbol+direction right after
+  // it just lost. Confirmed in the data this was happening — e.g. ETH long
+  // and NQ short got re-approved and re-entered every single cycle with zero
+  // pause, even right after stopping out, repeatedly eating the same ~1R loss
+  // on what was often the same chop. 90 min covers 3 cycles at the current
+  // 30-min cron interval — enough for conditions to genuinely change instead
+  // of immediately re-firing on stale/unchanged structure.
+  const COOLDOWN_MIN = 90;
+  const { data: recentLosses } = await sb.from('trades')
+    .select('symbol, direction, closed_at')
+    .eq('result', 'loss')
+    .gte('closed_at', new Date(Date.now() - COOLDOWN_MIN * 60 * 1000).toISOString());
+  const cooldownKeys = new Set((recentLosses ?? []).map((t: any) => `${t.symbol}:${t.direction}`));
+
   for (const trade of approved_trades.slice(0, 2)) { // max 2 trades per cycle
     if (openSymbolsNow.has(trade.symbol) || symbolsUsedThisCycle.has(trade.symbol)) {
       failed.push({ symbol: trade.symbol, reason: `Skipped — already have an open ${trade.symbol} position` });
+      continue;
+    }
+    const dirNormalized = trade.direction === 'buy' ? 'long' : 'short';
+    if (cooldownKeys.has(`${trade.symbol}:${dirNormalized}`)) {
+      failed.push({ symbol: trade.symbol, reason: `Skipped — ${trade.symbol} ${dirNormalized} lost within the last ${COOLDOWN_MIN}min, cooling down before re-entering the same thesis` });
       continue;
     }
     if (executed.length > 0) await new Promise(r => setTimeout(r, 1500)); // 1.5s delay between trades
@@ -231,7 +250,7 @@ export async function POST(req: NextRequest) {
           headers: { accept: 'text/json' }, signal: AbortSignal.timeout(10000),
         });
         const qj = await qr.json();
-        usePrice = trade.direction === 'long' ? (qj?.ask ?? qj?.bid ?? 0) : (qj?.bid ?? qj?.ask ?? 0);
+        usePrice = trade.direction === 'buy' ? (qj?.ask ?? qj?.bid ?? 0) : (qj?.bid ?? qj?.ask ?? 0);
       } catch {}
       // Yahoo fallback only if the broker quote genuinely failed
       if (!usePrice) {
