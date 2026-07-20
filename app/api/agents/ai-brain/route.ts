@@ -22,9 +22,26 @@ async function getGroqKey(): Promise<string | null> {
 // alone. Output stays a single structured JSON object (unlike /api/analyze's
 // free-text report) so the executor/risk pipeline downstream needs zero
 // changes — this only replaces HOW the score gets decided, not the contract.
-async function getKnowledgeContext(symbol: string, direction: string) {
-  const [{ data: kbRows }, { data: cotRows }, { data: smtRows }, { data: biasRow }] = await Promise.all([
-    sb.from('knowledge_base').select('title,content').limit(12),
+//
+// Knowledge base content is symbol-agnostic — it was previously being
+// re-fetched AND re-sent to Groq inside every single candidate's prompt
+// (up to 6 per cycle), multiplying token usage 6x for zero benefit. Confirmed
+// live: this burned through Groq's 100k tokens/day limit and fell back to the
+// rule-based path mid-cycle. Now fetched once per cycle and shared.
+let cachedKbContext: { text: string; fetchedAt: number } | null = null;
+async function getKnowledgeBaseContext(): Promise<string> {
+  const FIVE_MIN = 5 * 60 * 1000;
+  if (cachedKbContext && Date.now() - cachedKbContext.fetchedAt < FIVE_MIN) {
+    return cachedKbContext.text;
+  }
+  const { data: kbRows } = await sb.from('knowledge_base').select('title,content').limit(12);
+  const text = (kbRows ?? []).map((r: any) => `[${r.title}] ${r.content?.slice(0, 220)}`).join('\n');
+  cachedKbContext = { text, fetchedAt: Date.now() };
+  return text;
+}
+
+async function getSymbolContext(symbol: string, direction: string) {
+  const [{ data: cotRows }, { data: smtRows }, { data: biasRow }] = await Promise.all([
     sb.from('cot_data').select('*')
       .eq('symbol', symbol.replace('USD', '').replace('EURUSD', 'EUR').replace('GBPUSD', 'GBP'))
       .order('report_date', { ascending: false }).limit(1),
@@ -32,8 +49,6 @@ async function getKnowledgeContext(symbol: string, direction: string) {
       .order('detected_at', { ascending: false }).limit(3),
     sb.from('weekly_bias').select('*').eq('symbol', symbol).order('created_at', { ascending: false }).limit(1).single(),
   ]);
-
-  const kbContext = (kbRows ?? []).map((r: any) => `[${r.title}] ${r.content?.slice(0, 220)}`).join('\n');
 
   let cotContext = '';
   const c = cotRows?.[0];
@@ -51,11 +66,11 @@ async function getKnowledgeContext(symbol: string, direction: string) {
     ? `Weekly bias: ${biasRow.bias?.toUpperCase()} | Key levels: ${biasRow.key_levels ?? 'not set'} | Reasoning: ${biasRow.reasoning ?? ''}`
     : '';
 
-  return { kbContext, cotContext, smtContext, biasContext };
+  return { cotContext, smtContext, biasContext };
 }
 
-async function scoreSetup(setup: any): Promise<any> {
-  const ctx = await getKnowledgeContext(setup.symbol, setup.direction);
+async function scoreSetup(setup: any, sharedKbContext: string): Promise<any> {
+  const ctx = { kbContext: sharedKbContext, ...(await getSymbolContext(setup.symbol, setup.direction)) };
 
   const prompt = `You are an expert ICT/SMC prop trader. Score this trade setup honestly, grounded in the ICT knowledge base provided — do not just pattern-match on raw indicator values, actually reason about whether this setup matches the concepts described.
 
@@ -224,7 +239,8 @@ export async function POST(req: NextRequest) {
 
   // Score all candidates in parallel (max 6)
   const toScore = candidates.slice(0, 6);
-  const scored = await Promise.all(toScore.map(scoreSetup));
+  const sharedKb = await getKnowledgeBaseContext();
+  const scored = await Promise.all(toScore.map((s: any) => scoreSetup(s, sharedKb)));
 
   const approved = scored.filter((s:any) => s.trade_approved === true || s.setup_score >= 7);
 
