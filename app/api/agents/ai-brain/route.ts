@@ -107,8 +107,9 @@ Approve if score >= 7 AND medium/high confidence AND bias aligns AND not directl
       headers: { 'Authorization': `Bearer ${GROQ_KEY}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
         model: 'llama-3.3-70b-versatile',
-        max_tokens: 180,
+        max_tokens: 400,
         temperature: 0.1,
+        response_format: { type: 'json_object' },
         messages: [{ role: 'user', content: prompt }],
       }),
       signal: AbortSignal.timeout(20000),
@@ -116,7 +117,15 @@ Approve if score >= 7 AND medium/high confidence AND bias aligns AND not directl
     if (!res.ok) throw new Error(`Groq ${res.status}: ${await res.text()}`);
     const j = await res.json();
     const text = j?.choices?.[0]?.message?.content ?? '{}';
-    const clean = text.replace(/```json|```/g,'').trim();
+    let clean = text.replace(/```json|```/g,'').trim();
+    // Safety net: if there's stray text around the JSON object (or the
+    // model wraps it in prose despite the instruction), extract just the
+    // {...} span rather than failing the whole parse.
+    const start = clean.indexOf('{');
+    const end = clean.lastIndexOf('}');
+    if (start !== -1 && end !== -1 && end > start) {
+      clean = clean.slice(start, end + 1);
+    }
     const parsed = JSON.parse(clean);
     // knowledge_grounded lets us verify (via trade notes) that a given
     // approval actually came from the KB-aware LLM path, not the fallback —
